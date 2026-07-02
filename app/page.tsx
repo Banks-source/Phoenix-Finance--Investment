@@ -1,10 +1,10 @@
-import { createServerComponentClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { TYPE_LABELS } from "@/lib/taxonomy";
 import DeficitChart from "@/components/DeficitChart";
 
 // Overview tab: household summary, deficit/surplus tracker, this-month snapshot.
 export default async function OverviewPage() {
-  const supabase = createServerComponentClient();
+  const supabase = createServiceClient();
 
   const { data: monthly } = await supabase
     .from("transactions")

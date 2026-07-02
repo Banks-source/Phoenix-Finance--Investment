@@ -1,10 +1,10 @@
-import { createServerComponentClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { CATEGORIES, TYPE_LABELS } from "@/lib/taxonomy";
 import ReviewQueue from "@/components/ReviewQueue";
 
 // Categories tab: taxonomy reference + the categorisation approval queue.
 export default async function CategoriesPage() {
-  const supabase = createServerComponentClient();
+  const supabase = createServiceClient();
   const { data: pending } = await supabase
     .from("transactions")
     .select("id, date, amount, merchant, detail, category, sub_category, type")

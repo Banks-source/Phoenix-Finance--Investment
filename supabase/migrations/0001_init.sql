@@ -88,3 +88,12 @@ insert into categories (name, type) values
   ('Money Movement','transfers'),
   ('Income','income'),
   ('Financial','needs_categorisation');
+
+-- Enable RLS with no policies: default-deny for anon/authenticated roles.
+-- Service role key (server-only, never shipped to the browser) bypasses RLS
+-- as normal, which is how all reads/writes in v1 are routed.
+alter table accounts enable row level security;
+alter table categories enable row level security;
+alter table transactions enable row level security;
+alter table merchant_rules enable row level security;
+alter table budgets enable row level security;

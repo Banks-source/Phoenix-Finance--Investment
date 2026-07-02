@@ -1,9 +1,9 @@
-import { createServerComponentClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { TYPE_LABELS } from "@/lib/taxonomy";
 
 // Budget tab: budget-vs-actual by category/type per month, cash-flow forecast.
 export default async function BudgetPage() {
-  const supabase = createServerComponentClient();
+  const supabase = createServiceClient();
   const thisMonth = new Date().toISOString().slice(0, 7);
 
   const { data: actuals } = await supabase

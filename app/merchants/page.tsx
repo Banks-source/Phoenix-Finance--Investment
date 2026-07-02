@@ -1,8 +1,8 @@
-import { createServerComponentClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 
 // Merchants tab: aggregated spend per merchant, bulk recategorisation entry point.
 export default async function MerchantsPage() {
-  const supabase = createServerComponentClient();
+  const supabase = createServiceClient();
   const { data: rows } = await supabase
     .from("transactions")
     .select("merchant, amount, category")

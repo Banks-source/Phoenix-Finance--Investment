@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { CATEGORIES } from "@/lib/taxonomy";
 
 interface PendingTxn {
@@ -16,15 +15,20 @@ interface PendingTxn {
 
 export default function ReviewQueue({ items }: { items: PendingTxn[] }) {
   const [rows, setRows] = useState(items);
-  const supabase = createClient();
+  const [pending, setPending] = useState<string | null>(null);
 
   async function approve(id: string, category: string) {
-    const def = CATEGORIES.find((c) => c.name === category);
-    await supabase
-      .from("transactions")
-      .update({ category, type: def?.type ?? "needs_categorisation", status: "approved" })
-      .eq("id", id);
-    setRows((r) => r.filter((row) => row.id !== id));
+    if (!category) return;
+    setPending(id);
+    const res = await fetch("/api/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, category }),
+    });
+    setPending(null);
+    if (res.ok) {
+      setRows((r) => r.filter((row) => row.id !== id));
+    }
   }
 
   if (rows.length === 0) {
@@ -42,9 +46,10 @@ export default function ReviewQueue({ items }: { items: PendingTxn[] }) {
             </div>
           </div>
           <select
-            defaultValue={row.category}
+            defaultValue=""
+            disabled={pending === row.id}
             onChange={(e) => approve(row.id, e.target.value)}
-            className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1"
+            className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 disabled:opacity-50"
           >
             <option value="">Choose category…</option>
             {CATEGORIES.map((c) => (

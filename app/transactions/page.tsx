@@ -1,4 +1,4 @@
-import { createServerComponentClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { TYPE_LABELS } from "@/lib/taxonomy";
 
 // Transactions tab: full ledger with filter/search.
@@ -7,7 +7,7 @@ export default async function TransactionsPage({
 }: {
   searchParams: { owner?: string; type?: string };
 }) {
-  const supabase = createServerComponentClient();
+  const supabase = createServiceClient();
   let query = supabase
     .from("transactions")
     .select("date, amount, owner, merchant, category, sub_category, type, status")
