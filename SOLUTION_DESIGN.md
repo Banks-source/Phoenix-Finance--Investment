@@ -49,25 +49,13 @@ Applies identically inside each partition (see §4).
 **`review_queue`**
 Not a separate table — modeled as `transactions.status = 'pending_review'`, surfaced in the Categories and Transactions tabs.
 
-## 4. Partition architecture — Milani's data separation
+## 4. Data separation — v1 decision (2026-07-02): combined store
 
-This is the structural requirement, not a UI toggle. Requirement: Milani's financial data must be genuinely separate from Lloyd's, not a shared table filtered by `owner_id`, because of Lloyd's active debt/insolvency situation. **Recommended approach, pending sign-off from Lloyd's advisor before any implementation:**
+**Superseded design note:** the original plan here was two fully separate Supabase projects (one per person, no shared credentials) because Milani's data was flagged as needing genuine structural separation given Lloyd's debt/insolvency situation — see PRD §10. On 2026-07-02, Lloyd explicitly confirmed combining everything into a single store for v1, overriding that earlier requirement, ahead of the planned advisor sign-off.
 
-**Two separate Supabase projects** — one for Lloyd, one for Milani. Not two schemas in one project, not RLS on a shared table. Separate:
-- Postgres instances
-- Auth users/sessions
-- API credentials (anon key + service role key per project)
-- Backups
+**v1 implementation:** single Supabase project, single schema. Every row in `accounts` and `transactions` carries an `owner` field (`lloyd | milani | joint`), populated using this rule: NAB accounts → `lloyd`; CBA accounts → `milani` (per Lloyd's account list). The household view is a straightforward query over the combined tables rather than a cross-project merge.
 
-Rationale: in a legal discovery or insolvency-related request for records, "Lloyd's financial system" should not have any technical path to Milani's transaction-level data. Two projects with distinct credentials means there is no query, no join, no shared service-role key that reaches both. This is a materially stronger claim than RLS-based row separation, which still lives in one database and one set of admin credentials.
-
-**Household view (Overview tab):**
-- Implemented as a server-side Next.js API route that holds *read-only* keys to both projects.
-- On request, it fetches aggregated (not row-level) figures from each project — monthly totals by type, budget-vs-actual, deficit — and merges them in memory for display only.
-- Nothing merged is persisted. No combined table, no combined database.
-- Who can access the household view (Lloyd only, or both) is an open question to confirm with Lloyd — default assumption is both partners can see the merged summary, but only their own transaction-level detail.
-
-**Before building this:** confirm with advisor whether even *aggregated* cross-project figures (e.g., "household spent $X this month") carry any risk, and whether the household view should require explicit per-session consent from Milani rather than being always-on. Flag this as a decision point, not resolved here.
+**This is flagged as a live risk, not resolved:** if Lloyd's advisor later determines genuine separation is required, migrating off a combined store is materially harder than starting separated (data has to be split out, app logic that assumes one store has to be reworked, and any interim exposure during the combined period can't be undone). The original two-project design is preserved above in git history and should be revisited before the app holds a meaningful volume of new data if the advisor conversation lands differently.
 
 ## 5. Import pipeline
 

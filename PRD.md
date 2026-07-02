@@ -116,6 +116,7 @@ See Solution Design for full spec. Summary: CSV/workbook import → app becomes 
 
 ## 10. Open questions
 
-- Final partition mechanism (separate Supabase projects vs. separate schemas vs. separate databases) — pending advisor input, see Solution Design §4.
+- **Data separation (decided 2026-07-02, flagged as a live risk):** Lloyd confirmed combining Lloyd's and Milani's data into a single store for v1, ahead of the planned advisor conversation. See Solution Design §4 — this overrides the original "genuinely partitioned, structural not UI" requirement from the initial brief. If the advisor later says real separation is needed, this will require a migration, not a config change. Revisit before the advisor conversation happens if possible.
+- Account ownership rule for v1: NAB accounts → Lloyd, CBA accounts → Milani (confirmed 2026-07-02).
 - Whether Childcare (under Kids) should move to Bills/Fixed — deferred.
 - Whether "Bills" and "Fees" generic catch-alls should be broken down further — deferred, will surface naturally as low-confidence rows in the approval queue.
