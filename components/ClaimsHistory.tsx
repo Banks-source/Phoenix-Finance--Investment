@@ -193,7 +193,10 @@ export default function ClaimsHistory({
                 Assessed by ATO
                 {refundEst && (
                   <span className="ml-1 font-normal normal-case text-indigo-600">
-                    · {fyLabel(estimateFy)} estimated (from {fyLabel(refundEst.basisFy)} income)
+                    · {fyLabel(estimateFy)} estimated{" "}
+                    {refundEst.isActual
+                      ? `(using ${fyLabel(refundEst.basisFy)} income statement)`
+                      : `(from ${fyLabel(refundEst.basisFy)} income)`}
                   </span>
                 )}
               </td>
@@ -251,10 +254,10 @@ export default function ClaimsHistory({
       <p className="border-t px-4 py-2 text-[11px] text-gray-400">
         &ldquo;Submitted&rdquo; is what was given to the agent (personal workbooks). The {fyLabel(estimateFy)} column is
         an estimate seeded from the mean of your last 3 years — grey figures are the suggestion, type to override (saved
-        automatically). The {fyLabel(estimateFy)} refund is a rough estimate: prior-year gross wages and PAYG less your
-        estimated deductions, taxed on the current resident scale (ignores offsets, HELP and investment income).
-        Category-level <em>as-lodged</em> figures from the booklets aren&rsquo;t extracted yet. Reference only, not tax
-        advice.
+        automatically). The {fyLabel(estimateFy)} refund uses your finalised income statement (gross wages and PAYG
+        withheld) less your estimated deductions, taxed on the current resident scale + Medicare levy (ignores offsets,
+        HELP, MLS and investment income). The rental loss is carried from FY24-25 (&minus;$71,451) and assumes the Ocean
+        Grove loss sits on Lloyd&rsquo;s personal return. Reference only, not tax advice.
       </p>
     </div>
   );

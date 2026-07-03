@@ -24,6 +24,7 @@ export const CLAIM_CATEGORY_ORDER = [
   "Education",
   "Donations",
   "Managing tax affairs",
+  "Rental loss (negative gearing)",
   "Other",
 ] as const;
 export type ClaimCategory = (typeof CLAIM_CATEGORY_ORDER)[number];
@@ -234,6 +235,33 @@ export function claimsHistoryFys(): number[] {
 export const CLAIMS_ESTIMATE_FY = 2026;
 
 /**
+ * Actual income for the estimate year, from finalised ATO income statements /
+ * PAYG summaries (kept in the repo). When present these override the prior-year
+ * seed in the refund estimate. `grossWages` is the STP *total gross* (includes
+ * bonuses & leave, net of pre-tax salary sacrifice); `paygWithheld` is PAYGW.
+ */
+export const CLAIMS_ESTIMATE_INCOME: Partial<
+  Record<ClaimPerson, { grossWages: number; paygWithheld: number; source: string }>
+> = {
+  lloyd: {
+    grossWages: 286154.65, // IAG income statement FY2025-26 · total gross
+    paygWithheld: 100669.0, // PAYGW amount
+    source: "ATO income statement FY2025-26 (IAG, tax ready, reported 02/07/2026)",
+  },
+};
+
+/**
+ * Fallback estimate seeds for categories with no workbook history (e.g. the
+ * Ocean Grove rental loss). Used only when there's nothing to average. The
+ * FY26 rental loss is carried from the FY2025 result (−$71,451) and remains
+ * editable — confirm the loss sits on Lloyd's personal return (Ocean Grove /
+ * Inalaa Pty Ltd ownership is unresolved).
+ */
+export const CLAIMS_ESTIMATE_SEED: Partial<Record<ClaimPerson, Partial<Record<ClaimCategory, number>>>> = {
+  lloyd: { "Rental loss (negative gearing)": 71451 },
+};
+
+/**
  * Suggested estimate per category for the next year: the mean of the most
  * recent `lookback` years that actually reported that category, rounded to the
  * nearest dollar. Categories with no history are omitted. This is only a
@@ -247,6 +275,7 @@ export function claimsHistoryEstimate(
   const out: Partial<Record<ClaimCategory, number>> = {};
   if (!h) return out;
   const yearsDesc = [...h.years].sort((a, b) => b.fy - a.fy);
+  const seed = CLAIMS_ESTIMATE_SEED[person] ?? {};
   for (const cat of CLAIM_CATEGORY_ORDER) {
     const vals: number[] = [];
     for (const y of yearsDesc) {
@@ -255,6 +284,7 @@ export function claimsHistoryEstimate(
       if (vals.length >= lookback) break;
     }
     if (vals.length) out[cat] = Math.round(vals.reduce((s, v) => s + v, 0) / vals.length);
+    else if (seed[cat] != null) out[cat] = seed[cat];
   }
   return out;
 }
@@ -278,27 +308,39 @@ export interface RefundEstimate {
   paygWithheld: number;
   taxableIncome: number;
   refund: number;
-  basisFy: number; // the prior year gross/PAYG were seeded from
+  basisFy: number; // the year gross/PAYG were sourced from
+  isActual: boolean; // true when using a finalised income statement, not a prior-year seed
 }
 
 /**
- * Rough estimated refund for the planning year: seed gross wages and PAYG
- * withheld from the person's most recent documented year, subtract the
+ * Rough estimated refund for the planning year. Uses the actual income
+ * statement in `CLAIMS_ESTIMATE_INCOME` when available, otherwise seeds gross
+ * wages and PAYG from the person's most recent documented year. Subtracts the
  * estimated deductions to get taxable income, then refund = PAYG − (income tax
- * + Medicare levy). Returns null if there's no prior gross/PAYG to seed from.
- * Reference only — ignores offsets, HELP, investment income and levies.
+ * + Medicare levy). Returns null if there's no income to work from.
+ * Reference only — ignores offsets, HELP, MLS, Div 293 and investment income.
  */
 export function claimsRefundEstimate(
   person: ClaimPerson,
   deductionsTotal: number
 ): RefundEstimate | null {
-  const h = CLAIMS_HISTORY.find((p) => p.person === person);
-  if (!h) return null;
-  const src = [...h.years].sort((a, b) => b.fy - a.fy).find((y) => y.grossWages && y.paygWithheld);
-  if (!src) return null;
-  const grossWages = src.grossWages!;
-  const paygWithheld = src.paygWithheld!;
+  const actual = CLAIMS_ESTIMATE_INCOME[person];
+  let grossWages: number;
+  let paygWithheld: number;
+  let basisFy: number;
+  if (actual) {
+    grossWages = actual.grossWages;
+    paygWithheld = actual.paygWithheld;
+    basisFy = CLAIMS_ESTIMATE_FY;
+  } else {
+    const h = CLAIMS_HISTORY.find((p) => p.person === person);
+    const src = h && [...h.years].sort((a, b) => b.fy - a.fy).find((y) => y.grossWages && y.paygWithheld);
+    if (!src) return null;
+    grossWages = src.grossWages!;
+    paygWithheld = src.paygWithheld!;
+    basisFy = src.fy;
+  }
   const taxableIncome = Math.max(0, grossWages - Math.max(0, deductionsTotal));
   const tax = auResidentTax(taxableIncome) + medicareLevy(taxableIncome);
-  return { grossWages, paygWithheld, taxableIncome, refund: paygWithheld - tax, basisFy: src.fy };
+  return { grossWages, paygWithheld, taxableIncome, refund: paygWithheld - tax, basisFy, isActual: !!actual };
 }
