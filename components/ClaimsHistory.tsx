@@ -47,12 +47,25 @@ export default function ClaimsHistory({
   const effEstimate = (cat: string) => overrides[person]?.[cat] ?? computed[cat as keyof typeof computed] ?? 0;
   const estimateTotal = CLAIM_CATEGORY_ORDER.reduce((s, cat) => s + effEstimate(cat), 0);
 
+  // The rental loss is an income component (a negative net-rent line), not a
+  // work-related deduction — split it out so it flows through the return.
+  const RENTAL_CAT = "Rental loss (negative gearing)";
+  const rentalLossEst = effEstimate(RENTAL_CAT); // positive dollar loss
+  const workDeductionsEst = CLAIM_CATEGORY_ORDER.filter((c) => c !== RENTAL_CAT).reduce(
+    (s, cat) => s + effEstimate(cat),
+    0
+  );
+
   // Estimated FY26 outcome (seeded from the latest documented gross/PAYG).
-  const refundEst = useMemo(() => claimsRefundEstimate(person, estimateTotal), [person, estimateTotal]);
+  const refundEst = useMemo(
+    () => claimsRefundEstimate(person, workDeductionsEst, -rentalLossEst),
+    [person, workDeductionsEst, rentalLossEst]
+  );
 
   // End-to-end return for a historical FY, on the selected basis.
-  // "lodged" = the assessed return (deductions implied by gross − taxable);
-  // "submitted" = re-run the waterfall on the workbook deduction total.
+  // "lodged" = the assessed return, decomposed into salary + net rent + a
+  //   reconciling other-income line so it foots to the ATO-assessed taxable
+  //   income; "submitted" = re-run the waterfall on the workbook deductions only.
   const yearReturn = (fy: number): ReturnComputation | null => {
     const y = byFy.get(fy);
     if (!y || y.grossWages == null) return null;
@@ -60,12 +73,19 @@ export default function ClaimsHistory({
     const payg = y.paygWithheld ?? 0;
     if (basis === "lodged") {
       if (y.taxableIncome == null) return null; // no assessment on file
+      const netRental = y.netRental ?? 0;
+      const deductions = y.submittedTotal; // documented work-related deductions
+      // Residual income needed to reconcile the documented lines to the assessment.
+      const otherIncome = y.taxableIncome + deductions - gross - netRental;
       const incomeTax = y.assessedIncomeTax ?? 0;
       const medicare = y.assessedMedicare ?? 0;
       const totalTax = incomeTax + medicare;
       return {
-        assessableIncome: gross,
-        deductions: gross - y.taxableIncome,
+        salaryWages: gross,
+        netRental,
+        otherIncome,
+        assessableIncome: gross + netRental + otherIncome,
+        deductions,
         taxableIncome: y.taxableIncome,
         incomeTax,
         lito: 0,
@@ -76,21 +96,36 @@ export default function ClaimsHistory({
         refund: y.refund ?? payg - totalTax,
       };
     }
-    return computeReturn({ assessableIncome: gross, deductions: y.submittedTotal, paygWithheld: payg });
+    return computeReturn({ salaryWages: gross, deductions: y.submittedTotal, paygWithheld: payg });
   };
 
   const returnByFy = new Map<number, ReturnComputation | null>(fys.map((fy) => [fy, yearReturn(fy)]));
 
-  const waterfallRows: { label: string; key: keyof ReturnComputation; strong?: boolean; refund?: boolean }[] = [
-    { label: "Assessable income", key: "assessableIncome" },
-    { label: "less Deductions", key: "deductions" },
-    { label: "Taxable income", key: "taxableIncome", strong: true },
-    { label: "Income tax", key: "incomeTax" },
-    { label: "Medicare levy", key: "medicareLevy" },
-    { label: "Total tax", key: "totalTax", strong: true },
-    { label: "less PAYG withheld", key: "paygWithheld" },
-    { label: "Refund / (payable)", key: "refund", refund: true },
-  ];
+  const allReturns = [...returnByFy.values(), refundEst].filter(Boolean) as ReturnComputation[];
+  const hasValue = (key: keyof ReturnComputation) => allReturns.some((r) => Math.round(r[key]) !== 0);
+
+  const waterfallRows: {
+    label: string;
+    key: keyof ReturnComputation;
+    strong?: boolean;
+    refund?: boolean;
+    optional?: boolean;
+  }[] = (
+    [
+      { label: "Salary & wages", key: "salaryWages" },
+      { label: "Net rent (loss)", key: "netRental", optional: true },
+      { label: "Other income / adj.", key: "otherIncome", optional: true },
+      { label: "Assessable income", key: "assessableIncome", strong: true },
+      { label: "less Work-related deductions", key: "deductions" },
+      { label: "Taxable income", key: "taxableIncome", strong: true },
+      { label: "Income tax", key: "incomeTax" },
+      { label: "less Low income tax offset", key: "lito", optional: true },
+      { label: "Medicare levy", key: "medicareLevy" },
+      { label: "Total tax", key: "totalTax", strong: true },
+      { label: "less PAYG withheld", key: "paygWithheld" },
+      { label: "Refund / (payable)", key: "refund", refund: true },
+    ] as { label: string; key: keyof ReturnComputation; strong?: boolean; refund?: boolean; optional?: boolean }[]
+  ).filter((r) => !r.optional || hasValue(r.key));
 
   const flags = history.years.flatMap((y) => (y.flags ?? []).map((f) => ({ fy: y.fy, text: f })));
 
@@ -272,11 +307,12 @@ export default function ClaimsHistory({
                 {fys.map((fy) => {
                   const r = returnByFy.get(fy);
                   const v = r ? r[row.key] : undefined;
+                  const signed = row.refund || row.key === "netRental" || row.key === "otherIncome";
                   return (
                     <td
                       key={fy}
                       className={`px-4 py-1 text-right tabular ${
-                        row.refund && v != null ? (v >= 0 ? "text-emerald-600" : "text-rose-600") : ""
+                        signed && v != null && v !== 0 ? (v > 0 ? "text-emerald-600" : "text-rose-600") : ""
                       }`}
                     >
                       {v != null ? money(Math.round(v)) : <span className="text-gray-300">—</span>}
@@ -285,13 +321,14 @@ export default function ClaimsHistory({
                 })}
                 {(() => {
                   const v = refundEst ? refundEst[row.key] : undefined;
+                  const signed = row.refund || row.key === "netRental" || row.key === "otherIncome";
                   return (
                     <td
                       className={`px-4 py-1 text-right tabular ${
                         v == null
                           ? "text-gray-300"
-                          : row.refund
-                          ? v >= 0
+                          : signed && v !== 0
+                          ? v > 0
                             ? "text-emerald-600"
                             : "text-rose-600"
                           : "text-indigo-700"
@@ -321,13 +358,16 @@ export default function ClaimsHistory({
       )}
 
       <p className="border-t px-4 py-2 text-[11px] text-gray-400">
-        The category rows are what was <b>submitted</b> to the agent (personal workbooks). The end-to-end return shows{" "}
-        <b>As lodged</b> — the assessed figures from the ATO notice (deductions implied by gross − taxable income) — or{" "}
-        <b>Submitted</b>, which re-runs the waterfall on the workbook deduction total (the gap to the lodged refund is the
-        rental loss / other items not in the workbook). {fyLabel(estimateFy)} uses your finalised income statement less
-        your editable deductions, on the current resident scale + Medicare levy + LITO (ignores MLS, HELP, Div 293 and
-        non-wage income). Rental loss is carried from FY24-25 (&minus;$71,451), pending the Ocean Grove ownership
-        question. Reference only, not tax advice.
+        The category rows are what was <b>submitted</b> to the agent (personal workbooks). The end-to-end return breaks
+        income into <b>salary &amp; wages</b>, <b>net rent</b> (a loss shows in red — Lloyd FY24-25 is the Ocean Grove
+        result &minus;$71,451 from OG.xlsx) and <b>other income</b>. On the <b>As lodged</b> basis the other-income line
+        is the residual needed to reconcile the documented wages and rental loss to the ATO-assessed taxable income
+        (likely interest/distributions not itemised here); <b>Submitted</b> re-runs the waterfall on the workbook
+        deductions only, so the rental loss is excluded and the gap to the lodged refund is visible.{" "}
+        {fyLabel(estimateFy)} carries the rental loss forward as an editable estimate and taxes salary less deductions on
+        the current resident scale + Medicare levy + LITO (ignores MLS, HELP, Div 293 and non-wage income). The Ocean
+        Grove loss depends on the property sitting on Lloyd&rsquo;s personal return (Inalaa Pty Ltd ownership unresolved).
+        Reference only, not tax advice.
       </p>
     </div>
   );

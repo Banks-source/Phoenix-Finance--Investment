@@ -37,6 +37,8 @@ export interface ClaimYear {
   submittedTotal: number;
   wfhHours?: number; // work-from-home hours (method basis, later years)
   carKm?: number; // logbook / cents-per-km distance
+  /** Net rent for the year ($; negative = rental loss). From the rental P&L, not the workbook. */
+  netRental?: number;
   // Assessed side (ATO), where documented.
   grossWages?: number;
   paygWithheld?: number;
@@ -141,6 +143,7 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
         submittedTotal: 9489,
         wfhHours: 1890,
         carKm: 2500,
+        netRental: -71451.05, // Ocean Grove FY2025 P&L (OG.xlsx): rent $33,142 vs interest −$98,083 etc.
         grossWages: 222418.2,
         paygWithheld: 73084,
         taxableIncome: 158335,
@@ -322,10 +325,13 @@ export function lowIncomeTaxOffset(taxable: number): number {
   return 0;
 }
 
-/** Full end-to-end return waterfall, assessable income → refund. */
+/** Full end-to-end return waterfall, income → refund. */
 export interface ReturnComputation {
-  assessableIncome: number;
-  deductions: number;
+  salaryWages: number; // salary & wages income
+  netRental: number; // net rent (negative = rental loss)
+  otherIncome: number; // interest/distributions/etc. (or a residual to reconcile to the assessment)
+  assessableIncome: number; // salaryWages + netRental + otherIncome
+  deductions: number; // work-related deductions
   taxableIncome: number;
   incomeTax: number; // gross income tax on taxable income
   lito: number; // low income tax offset (reduces tax)
@@ -338,11 +344,16 @@ export interface ReturnComputation {
 
 /** Compute the resident individual return waterfall from income, deductions and PAYG. */
 export function computeReturn(input: {
-  assessableIncome: number;
+  salaryWages: number;
+  netRental?: number;
+  otherIncome?: number;
   deductions: number;
   paygWithheld: number;
 }): ReturnComputation {
-  const assessableIncome = Math.max(0, input.assessableIncome);
+  const salaryWages = input.salaryWages;
+  const netRental = input.netRental ?? 0;
+  const otherIncome = input.otherIncome ?? 0;
+  const assessableIncome = salaryWages + netRental + otherIncome;
   const deductions = Math.max(0, input.deductions);
   const taxableIncome = Math.max(0, assessableIncome - deductions);
   const incomeTax = auResidentTax(taxableIncome);
@@ -351,6 +362,9 @@ export function computeReturn(input: {
   const medicare = medicareLevy(taxableIncome);
   const totalTax = netIncomeTax + medicare;
   return {
+    salaryWages,
+    netRental,
+    otherIncome,
     assessableIncome,
     deductions,
     taxableIncome,
@@ -378,7 +392,8 @@ export interface RefundEstimate extends ReturnComputation {
  */
 export function claimsRefundEstimate(
   person: ClaimPerson,
-  deductionsTotal: number
+  deductionsTotal: number,
+  netRental = 0
 ): RefundEstimate | null {
   const actual = CLAIMS_ESTIMATE_INCOME[person];
   let grossWages: number;
@@ -396,6 +411,6 @@ export function claimsRefundEstimate(
     paygWithheld = src.paygWithheld!;
     basisFy = src.fy;
   }
-  const comp = computeReturn({ assessableIncome: grossWages, deductions: deductionsTotal, paygWithheld });
+  const comp = computeReturn({ salaryWages: grossWages, netRental, deductions: deductionsTotal, paygWithheld });
   return { ...comp, basisFy, isActual: !!actual };
 }
