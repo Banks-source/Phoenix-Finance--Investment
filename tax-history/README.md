@@ -1,6 +1,6 @@
 # Tax history
 
-Reference material for the v2 Tax pack phase (see `PRD.md` §8). First pass captured 2026-07-03 — FY2025 only, across personal and all known entities. FY2021–FY2024 and a deeper pass on Thomas Property Management & Oxygen Fit Group are still outstanding (see Gaps below).
+Reference material for the v2 Tax pack phase (see `PRD.md` §8). Second pass captured 2026-07-03 — FY2023 and FY2025 across personal and entities, plus structural documents (trust deeds, unit registers) for all four entities. FY2021, FY2022, FY2024 still have gaps — see `claims-patterns.md` for the coverage matrix.
 
 ## Entities
 
@@ -20,9 +20,12 @@ Reference material for the v2 Tax pack phase (see `PRD.md` §8). First pass capt
 
 - `property-sales/ocean-grove/` — the forced mortgagee sale of Unit 1, 91 The Avenue, Ocean Grove. See the profile note in that folder for the full picture (sale price, shortfall, capital loss inputs).
 
-## Gaps (not done in this pass)
+## Key structural finding
 
-- FY2021–FY2024 for all entities and both personal returns — only FY2025 pulled so far.
-- Thomas Property Management & Oxygen Fit Group: only the top-level company registration and trust deed docs pulled. The "Latest Docs" and "New Docs - 14_2_2021" subfolders in Drive haven't been opened yet.
-- `claims-patterns.md` (synthesized view of what's been claimed where, for pattern-spotting) — needs multiple years of data before it's useful, so deferred until the historical pull is done.
-- No structured/machine-readable extraction yet — everything here is source PDFs/spreadsheets, not yet parsed into the app's data model. That's app-development work, not a Drive-retrieval task.
+Thomas Empire Pty Ltd holds 100% of the units in The Oxygen Fit Group Trust (trustee: Thomas Property Management Pty Ltd). Lloyd's deregistration plans for both entities are not independent of each other — see both profiles.
+
+## Gaps (not done yet)
+
+- FY2021, FY2022, FY2024 still missing across most entities/personal — see `claims-patterns.md` for the exact coverage matrix.
+- No actual claims-pattern analysis yet (that requires opening each booklet's deduction schedule line by line) — `claims-patterns.md` is currently just a coverage index, not the analysis itself.
+- No structured/machine-readable extraction yet — everything here is source PDFs/spreadsheets, not yet parsed into the app's data model. That's tomorrow's app-development work, not a Drive-retrieval task.

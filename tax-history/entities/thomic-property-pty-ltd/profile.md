@@ -14,6 +14,7 @@ Confirmed with Lloyd (2026-07-03) that this is the **current** structure — no 
 
 - `thomic_trust_deed.pdf`
 - `thomic_member_resolution_constitution.pdf`
+- `2023/thomic_amended_return_fy2023.pdf` — the trust does lodge its own tax return (resolves the gap flagged in the previous pass).
 
 ## Open question — flagged, not resolved
 
@@ -21,4 +22,4 @@ Because Milani is sole director of the trustee company, deregistering Thomic Pro
 
 ## Gaps
 
-- No tax returns/financials for the trust itself pulled yet (search so far only turned up the deed and constitution documents, found outside the Tax Returns folder structure — worth checking whether the trust has its own tax return folder in Drive that wasn't covered in this pass).
+- FY2021, FY2022, FY2024, FY2025 returns not yet pulled for this trust — only FY2023 confirmed so far.
