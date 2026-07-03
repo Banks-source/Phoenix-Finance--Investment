@@ -19,12 +19,13 @@ Honest status: this is a **coverage matrix** of what's been collected, not yet t
 
 | | 2021 | 2022 | 2023 | 2024 | 2025 |
 |---|---|---|---|---|---|
-| Lloyd (personal) | — | — | ✅ Income statement, workbook | — | ✅ Assessment, PAYG, workbook |
+| Lloyd (personal) | — | — | ✅ Income statement, workbook | ✅ Income statement, workbook | ✅ Assessment, PAYG, workbook |
 | Milani (personal) | — | — | ✅ Income statement, workbook | ✅ Expenses workbook | ✅ Assessment, PAYG, workbook |
-| Thomas Empire Pty Ltd | Financial summary | — | ✅ Amended return | — | ✅ Payment slip, Tyquin St workbook |
-| Thomas Property Management / Oxygen Fit Group | Unit register, deed, ASIC extract (undated) | | | | |
+| Thomas Empire Pty Ltd | Financial summary | — | ✅ Amended return | — | ✅ Payment slip, Tyquin St workbook, Tyquin St lot sale docs (4 lots) |
+| Thomas Property Management / Oxygen Fit Group | Unit register, deed, ASIC extract (undated) | | | | ✅ Kia transfer docs (2026, resolves car blocker) |
 | Thomic Property / Thomic Group Trust | Trust deed (undated) | — | ✅ Amended return | — | — |
 | SMSF (LT & MS) | Setup | — | ✅ Koinly report, NAB summary | — | — |
+| Ocean Grove (personal) | — | — | — | ✅ Airbnb rental income Sep–Dec | ✅ Airbnb rental income Jan–Mar, 2018 purchase docs |
 
 ## Next step to actually answer "what are my claim patterns"
 
@@ -42,3 +43,13 @@ Both of Lloyd's "deregister the company, keep the entity/losses available" plans
 - **Thomic Property Pty Ltd** is the sole trustee of **Thomic Property Group Trust**, and Milani is its sole director — deregistering the company removes the trust's only trustee.
 
 None of this is resolved — it's flagged in each entity's profile.md and needs the accountant's input before Lloyd proceeds with either deregistration.
+
+
+## Third pass additions (2026-07-03, "tax-relevant only" scope)
+
+- Tyquin St lot sale documents (contracts + adjustment statements, all 4 lots) added to Thomas Empire's profile — primary source for the development loss figure, not yet totalled.
+- Ocean Grove: 2018 original purchase documents added (cost-base starting point) — flagged an unresolved entity mismatch (purchaser was "Inalaa Pty Ltd", not Lloyd personally or any known entity). Plus 7 months of Airbnb rental statements (Sep 2023–Mar 2024).
+- Kia transfer documents added to Thomas Property Management's profile — resolves the "car still registered to the company" retirement blocker (point #3 in the original brief).
+- Lloyd's FY2024 personal income statement and workbook added, closing a previously-unnoticed gap.
+- Ashby Crt rental summaries (2024, 2025) collected as a new, not-yet-profiled property.
+- Not pulled in this pass (descoped as not tax-relevant): raw bank statements, generic property backup documents, "Latest Docs"/"New Docs" miscellaneous subfolders.

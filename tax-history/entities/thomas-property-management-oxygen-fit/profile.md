@@ -15,6 +15,7 @@ The Oxygen Fit Group Trust's own tax position is captured inside the consolidate
 
 ## What's captured here
 
+- `2026/kia_transfer_agreement_executed.pdf`, `2026/kia_board_resolution.pdf` — the executed Kia transfer, resolving retirement blocker #1 (see below).
 - `tpm_company_registration.pdf`, `tpm_certificate_of_registration.pdf`, `tpm_asic_company_extract.pdf` — formation and current ASIC extract.
 - `oxygen_fit_group_trust_deed.pdf` — the trust deed (this is the "second trust deed" flagged as unresolved in the previous pass — now identified).
 - `tpm_register_of_units.pdf`, `tpm_transfer_of_units.pdf` — unit holder history described above.
@@ -22,7 +23,7 @@ The Oxygen Fit Group Trust's own tax position is captured inside the consolidate
 
 ## Retirement blockers
 
-1. Lloyd's car is still registered to this company — needs transferring out before wind-up.
+1. ~~Lloyd's car is still registered to this company~~ — **resolved 2026-07-03.** `2026/kia_transfer_agreement_executed.pdf` and `2026/kia_board_resolution.pdf` show the Kia has been transferred out of the company via an executed transfer agreement and board resolution. Worth double-checking the transfer date and that registration has actually been updated with VicRoads, but the paperwork blocker is cleared.
 2. Because Thomas Empire Pty Ltd holds 100% of the units in the trust this company administers, **retiring Thomas Property Management can't be considered independently of what happens to Thomas Empire** (see that entity's profile — Lloyd's plan there is to let ASIC deregister it for non-payment). If Thomas Empire is deregistered first, its unit holding in this trust becomes an asset of a dissolved company, which typically vests in ASIC (as ASIC's "unclaimed property") rather than simply disappearing — worth raising with the accountant which order (if any) avoids complications.
 
 ## Gaps

@@ -10,6 +10,7 @@ Deregistering "Thomas Empire" as a company doesn't just remove a standalone enti
 
 ## What's captured here
 
+- `tyquin-st-sale-documents/` — contracts and adjustment statements for all 4 Tyquin St lots sold (TH2-70A, TH3-70, TH4-68B, TH5-68A): `th2_70a_contract.pdf` + `th2_70a_adjustment_statement.pdf`, `th3_70_contract.pdf` + `th3_70_adjustment_statement.pdf`, `th4_68b_contract.pdf` + `th4_68b_adjustment_statement.pdf`, `th5_68a_contract.pdf` + `th5_68a_adjustment_statement.pdf`. These are the actual sale-price/cost-adjustment records for the Tyquin St development lots — the primary source documents for calculating the development loss Lloyd wants preserved (not yet totalled or reconciled against `2025/tyquin_st_fy25_taxes.xlsx`).
 - `2025/thomas_empire_income_tax_payment_slip.pdf`, `2025/tyquin_st_fy25_taxes.xlsx`
 - `2023/thomas_empire_amended_return_fy2023.pdf` — FY2023 was amended (worth understanding why — amendments often mean something was corrected or a loss was recalculated).
 - `thomas_empire_financial_summary_2021.pdf`
@@ -32,5 +33,5 @@ Lloyd's plan is to let the company be deregistered by ASIC for non-payment while
 
 - FY2024 taxation year not yet cross-checked against the FY2024 amended consolidated booklet.
 - No confirmation of current ASIC registration status (i.e. whether deregistration has actually started/completed).
-- Full Tyquin St loss figure not yet extracted, and not yet attributed to company vs. trust.
+- Full Tyquin St loss figure not yet extracted, and not yet attributed to company vs. trust — the 4 lot sale contracts/adjustment statements are now collected (see above) but not yet totalled against build/acquisition costs to produce an actual loss figure.
 - Reason for the FY2023 amendment not yet established.
