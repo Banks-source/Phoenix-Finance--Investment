@@ -91,11 +91,10 @@ Schema (near-consistent across sheets, minor header drift): `Date, Amount, Accou
 ### v1 — Budget (this build, target 2–3 days)
 See Solution Design for full spec. Summary: CSV/workbook import → app becomes source of truth, automated categorisation with approval step, budget-vs-actual, cash-flow forecast, deficit tracker, partitioned household view. Tabs: Overview, Budget, Categories, Transactions, Merchants.
 
-### v2 — Tax pack (later, noted only)
-- Personal tax pack first: organise and classify transactions into an accountant-ready pack (categorised, exportable, audit trail).
-- Then extend to companies (Thomas Empire Pty Ltd, Thomas Group Trust) and SMSF.
-- Store historical returns.
-- Later: make the pack AI-queryable ("what did I claim for X in FY24?").
+### v2 — Tax pack (active — see `SOLUTION_DESIGN_TAX.md`)
+- **Phase 1 (build first): FY26 personal claims builder.** Tag deductible transactions (Lloyd + Milani), roll up per person by ATO claim category, export an accountant-ready pack for the ~5 Jul 2026 deadline. Includes a first-class **year-over-year category comparison** (this FY vs prior FYs) to catch missed deductions.
+- **Phase 2: entity foundation + "where I stand."** Read-only entity pages (identity, ABN/ACN/TFN, trust/share structure, headline P&L FY20–FY25) and a wind-up dependency view, seeded from the `tax-history/` analysis (`claims-patterns-analysis.md`, `tyquin-st-loss-summary.md`, `entity-wind-up-summary.md`).
+- **Phase 3 (later):** entity-tagged claims, AI-queryable pack ("what did I claim for X in FY24?"), accountant reconciliation.
 
 ### v3 — Kubera integration + investment thesis engine (later, noted only)
 - Integrate net-worth data from Kubera.

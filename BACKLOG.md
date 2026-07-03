@@ -38,6 +38,22 @@ Handoff point from Cowork build session to local dev (2026-07-02). Ordered by pr
 - **The combined-store decision is flagged as a live risk, not resolved.** `SOLUTION_DESIGN.md` §4 and `PRD.md` §10 both note this: you overrode the original "genuinely partitioned" requirement to move faster, ahead of the advisor conversation. If that conversation lands differently, migrating off a combined store gets harder the more data and app logic accumulate on top of it. Worth having that conversation sooner rather than later.
 - Household view access model (should both partners see merged figures, or just you?) was never explicitly decided — currently there's no distinction in the code since there's no auth yet.
 
+## 🔵 v2 Tax — planned (see `SOLUTION_DESIGN_TAX.md`)
+
+**Phase 1 — FY26 personal claims builder + YoY (build first):**
+- Migration `0002_tax_claims.sql`: add `deductible`, `tax_category`, `tax_note`, `entity_id` to `transactions`; create + seed `tax_categories` reference (ATO claim buckets, with `not_deductible` so Groceries/Dining never suggest).
+- `/tax/claims` review surface: per-owner (Lloyd/Milani) queue of FY26 deduction candidates; set deductible + tax_category + note; bulk-by-merchant; no silent auto-claiming.
+- `/tax` hub: FY26 claim totals per person + **year-over-year category matrix** (FY22→FY26, delta vs prior year, "deductible only" lens) + CSV export pack.
+
+**Phase 2 — Entity foundation + where-I-stand:**
+- Migration `0003_entities.sql`: `entities`, `entity_relationships`, `entity_financials`, `entity_documents`.
+- `scripts/seed_entities.ts`: load from `tax-history/` markdown; every financial `verified=false` until checked vs accountant copies (OCR caveat).
+- `/tax/entities` + `/tax/entities/[slug]` (identity, structural facts, headline P&L FY20–FY25, docs); `/tax/standing` wind-up dependency chain + flags checklist.
+
+**Phase 3 — later:** entity-tagged claims, AI-queryable pack, accountant reconciliation.
+
+**Flags to carry in:** seeded entity figures are OCR reads (unverified); Ocean Grove Inalaa Pty Ltd ownership unresolved (affects whether the rental loss sits on Lloyd's personal return); Milani FY25 ~$43k deductions untraced.
+
 ## Ops
 
 - No tests exist (unit or e2e).
@@ -49,4 +65,5 @@ Handoff point from Cowork build session to local dev (2026-07-02). Ordered by pr
 - Locked category taxonomy: `PRD.md` §7
 - Data model: `SOLUTION_DESIGN.md` §3
 - Categorisation pipeline design: `SOLUTION_DESIGN.md` §5
-- v2 (Tax pack), v3 (Kubera + investment thesis engine), v4 (spending optimisation): `PRD.md` §8, noted only, not started
+- v2 Tax pack design: `SOLUTION_DESIGN_TAX.md` (Phase 1 = FY26 claims + YoY; Phase 2 = entities)
+- v3 (Kubera + investment thesis engine), v4 (spending optimisation): `PRD.md` §8, noted only, not started
