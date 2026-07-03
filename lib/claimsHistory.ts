@@ -258,3 +258,47 @@ export function claimsHistoryEstimate(
   }
   return out;
 }
+
+/** AU resident income tax, FY2024-25 scale onward (Stage 3). Excludes offsets. */
+export function auResidentTax(taxable: number): number {
+  if (taxable <= 18200) return 0;
+  if (taxable <= 45000) return (taxable - 18200) * 0.16;
+  if (taxable <= 135000) return 4288 + (taxable - 45000) * 0.3;
+  if (taxable <= 190000) return 31288 + (taxable - 135000) * 0.37;
+  return 51638 + (taxable - 190000) * 0.45;
+}
+
+/** Simplified Medicare levy (2% above the low-income threshold). */
+export function medicareLevy(taxable: number): number {
+  return taxable > 27222 ? taxable * 0.02 : 0;
+}
+
+export interface RefundEstimate {
+  grossWages: number;
+  paygWithheld: number;
+  taxableIncome: number;
+  refund: number;
+  basisFy: number; // the prior year gross/PAYG were seeded from
+}
+
+/**
+ * Rough estimated refund for the planning year: seed gross wages and PAYG
+ * withheld from the person's most recent documented year, subtract the
+ * estimated deductions to get taxable income, then refund = PAYG − (income tax
+ * + Medicare levy). Returns null if there's no prior gross/PAYG to seed from.
+ * Reference only — ignores offsets, HELP, investment income and levies.
+ */
+export function claimsRefundEstimate(
+  person: ClaimPerson,
+  deductionsTotal: number
+): RefundEstimate | null {
+  const h = CLAIMS_HISTORY.find((p) => p.person === person);
+  if (!h) return null;
+  const src = [...h.years].sort((a, b) => b.fy - a.fy).find((y) => y.grossWages && y.paygWithheld);
+  if (!src) return null;
+  const grossWages = src.grossWages!;
+  const paygWithheld = src.paygWithheld!;
+  const taxableIncome = Math.max(0, grossWages - Math.max(0, deductionsTotal));
+  const tax = auResidentTax(taxableIncome) + medicareLevy(taxableIncome);
+  return { grossWages, paygWithheld, taxableIncome, refund: paygWithheld - tax, basisFy: src.fy };
+}
