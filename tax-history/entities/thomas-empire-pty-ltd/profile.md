@@ -21,6 +21,10 @@ Deregistering "Thomas Empire" as a company doesn't just remove a standalone enti
 
 Thomas Empire is tied to the Tyquin St development, which incurred significant losses (see the property-development documents already referenced elsewhere in Drive — Tyquin St Project - Actuals workbooks, the iBhomes court case). Lloyd wants to preserve these losses for future profit offset.
 
+## New finding — 39 Powlett St (2026-07-03)
+
+Thomas Empire Pty Ltd was the legal vendor for two property sales in this window — Unit 1, 39 Powlett St (settled 06/08/21, $473,000) and Unit 2, 39 Powlett St (settled 31/10/22, $445,000) — see `tax-history/properties/powlett-st/findings.md`. In both cases the net sale proceeds went to Lloyd personally / Lloyd & Milani jointly, not to the company. This wasn't part of the original brief and isn't yet reconciled — it's another item (alongside the Oxygen Fit Group Trust unit holding below) that needs sorting out before any deregistration.
+
 ## Structural link to Thomas Property Management / Oxygen Fit Group
 
 Thomas Empire Pty Ltd holds **100% of the units (120/120)** in The Oxygen Fit Group Trust, for which Thomas Property Management Pty Ltd is trustee (confirmed via the Register of Unit Holders — see that entity's profile). Lloyd also wants to retire Thomas Property Management. **These two wind-ups aren't independent** — Thomas Empire's unit holding is an asset that has to go somewhere if Thomas Empire is deregistered; it doesn't just disappear.
