@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { PeriodFilter, periodBounds, periodsFromDates } from "@/lib/fy";
+import { PeriodFilter, periodBounds, periodsFromDates, fyRange, fyEndYearForDate } from "@/lib/fy";
 import { TxnType } from "@/lib/taxonomy";
+import { CLAIM_CANDIDATE_CATEGORIES, categoryIsDeductibleLens } from "@/lib/taxcats";
 
 type AnyClient = ReturnType<typeof createServiceClient>;
 
@@ -37,6 +38,10 @@ export interface Txn {
   status: string;
   source: string;
   confidence: number | null;
+  deductible?: boolean | null;
+  tax_category?: string | null;
+  tax_note?: string | null;
+  entity_id?: string | null;
 }
 
 /** Distinct dates across the whole store — used to build the period dropdown. */
@@ -147,4 +152,122 @@ export async function fetchSubCategoryTotals(type: string, period?: PeriodFilter
     map.set(key, e);
   }
   return [...map.values()].sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+}
+
+// ---------------------------------------------------------------------------
+// Tax (v2) — FY claims builder + year-over-year comparison
+// ---------------------------------------------------------------------------
+
+/**
+ * Expense transactions in a period that are candidates for a tax deduction:
+ * either the internal category hints at a claim, or the row has already been
+ * touched by tax review (deductible set, or a tax_category assigned). Income
+ * and transfers are excluded — claims are expenses. Pass `all` to include every
+ * approved expense regardless of suggestion.
+ */
+export async function fetchClaimCandidates(
+  period: PeriodFilter,
+  opts: { owner?: string; all?: boolean } = {}
+) {
+  const { rows } = await fetchAllTransactions({ period, status: "approved", owner: opts.owner });
+  return rows.filter((r) => {
+    if (r.type === "income" || r.type === "transfers") return false;
+    if (opts.all) return true;
+    if (r.deductible != null || r.tax_category) return true;
+    return CLAIM_CANDIDATE_CATEGORIES.has(r.category ?? "");
+  });
+}
+
+export interface ClaimTotal {
+  tax_category: string;
+  owner: string;
+  amount: number; // absolute claimed value
+  count: number;
+}
+
+/** Sum of confirmed deductions (deductible=true) grouped by tax_category + owner. */
+export async function fetchClaimTotals(period: PeriodFilter, owner?: string): Promise<ClaimTotal[]> {
+  const b = periodBounds(period);
+  const rows = await fetchAll<{ tax_category: string | null; owner: string; amount: number }>((c) => {
+    let q = c
+      .from("transactions")
+      .select("tax_category, owner, amount")
+      .eq("status", "approved")
+      .eq("deductible", true);
+    if (b) q = q.gte("date", b[0]).lte("date", b[1]);
+    if (owner) q = q.eq("owner", owner);
+    return q;
+  });
+  const map = new Map<string, ClaimTotal>();
+  for (const r of rows) {
+    const code = r.tax_category ?? "unassigned";
+    const key = `${code}::${r.owner}`;
+    const e = map.get(key) ?? { tax_category: code, owner: r.owner, amount: 0, count: 0 };
+    e.amount += Math.abs(Number(r.amount));
+    e.count += 1;
+    map.set(key, e);
+  }
+  return [...map.values()].sort((a, b) => b.amount - a.amount);
+}
+
+export interface YoyCell {
+  all: number;
+  lloyd: number;
+  milani: number;
+  joint: number;
+  count: number;
+}
+export interface YoyRow {
+  category: string;
+  type: TxnType;
+  deductibleLens: boolean; // category maps to a deductible tax bucket
+  byFy: Record<number, YoyCell>;
+}
+
+/**
+ * Net-by-category matrix across several financial years (columns), so the tax
+ * hub can show this FY against prior FYs for the same categories. Fetches the
+ * whole span once and buckets in memory rather than N period queries.
+ */
+export async function fetchCategoryYoY(fys: number[]): Promise<YoyRow[]> {
+  if (fys.length === 0) return [];
+  const sorted = [...fys].sort((a, b) => a - b);
+  const start = fyRange(sorted[0]).start;
+  const end = fyRange(sorted[sorted.length - 1]).end;
+  const fySet = new Set(fys);
+
+  const rows = await fetchAll<{ date: string; category: string | null; type: TxnType; owner: string; amount: number }>(
+    (c) =>
+      c
+        .from("transactions")
+        .select("date, category, type, owner, amount")
+        .eq("status", "approved")
+        .gte("date", start)
+        .lte("date", end)
+  );
+
+  const empty = (): YoyCell => ({ all: 0, lloyd: 0, milani: 0, joint: 0, count: 0 });
+  const map = new Map<string, YoyRow>();
+  for (const r of rows) {
+    const fy = fyEndYearForDate(r.date);
+    if (!fySet.has(fy)) continue;
+    const cat = r.category ?? "Uncategorised";
+    const row =
+      map.get(cat) ??
+      ({ category: cat, type: r.type, deductibleLens: categoryIsDeductibleLens(cat), byFy: {} } as YoyRow);
+    const cell = (row.byFy[fy] ??= empty());
+    const amt = Number(r.amount);
+    cell.all += amt;
+    cell.count += 1;
+    if (r.owner === "lloyd") cell.lloyd += amt;
+    else if (r.owner === "milani") cell.milani += amt;
+    else cell.joint += amt;
+    map.set(cat, row);
+  }
+
+  // Sort by the most recent FY's absolute magnitude, largest first.
+  const latest = sorted[sorted.length - 1];
+  return [...map.values()].sort(
+    (a, b) => Math.abs(b.byFy[latest]?.all ?? 0) - Math.abs(a.byFy[latest]?.all ?? 0)
+  );
 }
