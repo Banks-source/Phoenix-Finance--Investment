@@ -1,14 +1,17 @@
 # Thomas Property Management Pty Ltd (& Oxygen Fit Group) — profile
 
-**ABN:** 71 397 527 214
 **ACN:** 608 268 382
 **Status:** Lloyd wants to retire this company.
+
+**Correction (2026-07-03):** the ABN 71 397 527 214 found in this entity's Drive folder (`tpm_abn.txt`) actually belongs to **The Oxygen Fit Group Trust**, per that trust's own tax return cover page — not to Thomas Property Management Pty Ltd itself. The company's own ABN hasn't been separately confirmed yet. Flagging so this doesn't get used incorrectly.
 
 ## Structure (confirmed 2026-07-03)
 
 Thomas Property Management Pty Ltd is trustee of **The Oxygen Fit Group Trust**. Per the Register of Unit Holders: units were originally split between Thomas Empire Pty Ltd, David Serrano, Dale Joseph Kapper, and Rosemary Kapper (issued 02/08/2011). On 28/11/2012, the other three unit holders' units were cancelled and reissued to Thomas Empire Pty Ltd, which has held **100% of the 120 units since then**.
 
 So: **Thomas Empire Pty Ltd is the sole beneficiary of The Oxygen Fit Group Trust, administered by Thomas Property Management Pty Ltd as trustee.** These two entities and their deregistration plans (points #3 and #4 in your original brief) are not independent — winding up one affects the other.
+
+The Oxygen Fit Group Trust's own tax position is captured inside the consolidated annual booklets (`tax-history/consolidated-annual-booklets/`) — it appears there every year from FY2020 through FY2025.
 
 ## What's captured here
 
@@ -24,5 +27,5 @@ So: **Thomas Empire Pty Ltd is the sole beneficiary of The Oxygen Fit Group Trus
 
 ## Gaps
 
-- "Latest Docs" and "New Docs - 14_2_2021" subfolders both contained the same four documents (deed, unit certificates, ASIC extract, constitution) — likely just duplicated across two upload sessions, not two different states. Not fully confirmed identical.
-- No FY2021–FY2025 taxation booklets pulled for this entity/trust specifically yet.
+- Company's own ABN not confirmed (see correction above).
+- No FY2021–FY2025 taxation booklets pulled for this entity/trust specifically yet — though The Oxygen Fit Group Trust's figures are in the consolidated booklets.

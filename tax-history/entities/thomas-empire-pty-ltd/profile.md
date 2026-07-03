@@ -2,12 +2,19 @@
 
 **Status:** Active per ASIC records as far as we know; company fees currently unpaid. Lloyd's stated intent is to let ASIC deregister the company rather than pay ongoing fees.
 
+**Important correction (2026-07-03):** Thomas Empire Pty Ltd plays two roles that need to be told apart:
+1. A standalone company (this profile).
+2. **Trustee of The Thomas Group Trust** (see that trust's own profile) — a distinct trust entity that shows up in every consolidated annual booklet FY2020–FY2025.
+
+Deregistering "Thomas Empire" as a company doesn't just remove a standalone entity — it also removes the trustee of The Thomas Group Trust and (per the Thomas Property Management profile) forfeits Thomas Empire's 100% unit holding in The Oxygen Fit Group Trust. Where the Tyquin St losses Lloyd wants preserved actually sit (the company, The Thomas Group Trust, or split between them) hasn't been established yet — this materially affects whether the "deregister and keep the losses" plan works.
+
 ## What's captured here
 
-- `2025/thomas_empire_taxation_booklet_fy2025.pdf`, `2025/thomas_empire_income_tax_payment_slip.pdf`, `2025/tyquin_st_fy25_taxes.xlsx`
-- `2023/thomas_taxation_booklet_fy2023.pdf`, `2023/thomas_empire_amended_return_fy2023.pdf` — FY2023 was amended (worth understanding why — amendments often mean something was corrected or a loss was recalculated).
+- `2025/thomas_empire_income_tax_payment_slip.pdf`, `2025/tyquin_st_fy25_taxes.xlsx`
+- `2023/thomas_empire_amended_return_fy2023.pdf` — FY2023 was amended (worth understanding why — amendments often mean something was corrected or a loss was recalculated).
 - `thomas_empire_financial_summary_2021.pdf`
 - `accountant_invoice_fy2018_2021.pdf`
+- The consolidated annual booklets (`tax-history/consolidated-annual-booklets/`, FY2020–FY2025) also cover this entity and The Thomas Group Trust together each year — these are the primary source now, more complete than the entity-specific documents above.
 
 ## Tyquin St development
 
@@ -19,11 +26,11 @@ Thomas Empire Pty Ltd holds **100% of the units (120/120)** in The Oxygen Fit Gr
 
 ## Open question — flagged, not resolved
 
-Lloyd's plan is to let the company be deregistered by ASIC for non-payment while keeping the Tyquin St losses available for future offset. **Whether both of those things can happen together depends on exactly how the losses sit** (in the company itself vs. a trust it's linked to) and on ASIC deregistration mechanics — needs a direct answer from Lloyd's accountant before relying on it.
+Lloyd's plan is to let the company be deregistered by ASIC for non-payment while keeping the Tyquin St losses available for future offset. **Whether both of those things can happen together depends on exactly how the losses sit** (in the company itself vs. The Thomas Group Trust it's trustee of) and on ASIC deregistration mechanics — needs a direct answer from Lloyd's accountant before relying on it. This is now a three-way tangle (Thomas Empire Pty Ltd / The Thomas Group Trust / The Oxygen Fit Group Trust), not a simple one-company deregistration.
 
 ## Gaps
 
-- FY2021, FY2022, FY2024 taxation booklets not yet pulled (have FY2023, FY2025).
+- FY2024 taxation year not yet cross-checked against the FY2024 amended consolidated booklet.
 - No confirmation of current ASIC registration status (i.e. whether deregistration has actually started/completed).
-- Full Tyquin St loss figure not yet extracted from the FY23/FY25 workbooks.
+- Full Tyquin St loss figure not yet extracted, and not yet attributed to company vs. trust.
 - Reason for the FY2023 amendment not yet established.

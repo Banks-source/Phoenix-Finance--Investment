@@ -7,9 +7,14 @@ Reference material for the v2 Tax pack phase (see `PRD.md` §8). Second pass cap
 | Entity | Status | Profile |
 |---|---|---|
 | Thomas Empire Pty Ltd | Active, unpaid fees — Lloyd hoping for ASIC deregistration | [`entities/thomas-empire-pty-ltd/profile.md`](./entities/thomas-empire-pty-ltd/profile.md) |
+| The Thomas Group Trust | Newly discovered 2026-07-03, trustee is Thomas Empire Pty Ltd | [`entities/thomas-group-trust/profile.md`](./entities/thomas-group-trust/profile.md) |
 | Thomas Property Management Pty Ltd (& Oxygen Fit Group) | To be retired — car still registered to it | [`entities/thomas-property-management-oxygen-fit/profile.md`](./entities/thomas-property-management-oxygen-fit/profile.md) |
 | Thomic Property Pty Ltd (trustee of Thomic Property Group Trust) | To be deregistered, trust structure to be retained | [`entities/thomic-property-pty-ltd/profile.md`](./entities/thomic-property-pty-ltd/profile.md) |
 | LT & MS Investments Pty Ltd / LT & MS Superannuation Fund (SMSF) | Active | [`entities/smsf/profile.md`](./entities/smsf/profile.md) |
+
+## Consolidated annual booklets
+
+`consolidated-annual-booklets/` — one document per year, FY2020 through FY2025, prepared by J. Giuffre & Co, each covering every entity and both personal returns together. This is the single best source for the claims-pattern analysis (point #1 of the original brief) — see `claims-patterns.md`.
 
 ## Personal
 
