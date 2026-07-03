@@ -6,7 +6,9 @@ import {
   claimsHistoryFys,
   claimsHistoryEstimate,
   claimsRefundEstimate,
+  computeReturn,
   ClaimPerson,
+  ReturnComputation,
 } from "@/lib/claimsHistory";
 import { money } from "@/lib/format";
 import { fyLabel } from "@/lib/fy";
@@ -18,6 +20,7 @@ const PEOPLE: { key: ClaimPerson; label: string }[] = [
 ];
 
 type Overrides = Record<ClaimPerson, Partial<Record<string, number>>>;
+type Basis = "lodged" | "submitted";
 
 export default function ClaimsHistory({
   estimateFy,
@@ -27,6 +30,7 @@ export default function ClaimsHistory({
   initialOverrides: Overrides;
 }) {
   const [person, setPerson] = useState<ClaimPerson>("lloyd");
+  const [basis, setBasis] = useState<Basis>("lodged");
   const [overrides, setOverrides] = useState<Overrides>(
     initialOverrides ?? { lloyd: {}, milani: {} }
   );
@@ -46,11 +50,46 @@ export default function ClaimsHistory({
   // Estimated FY26 outcome (seeded from the latest documented gross/PAYG).
   const refundEst = useMemo(() => claimsRefundEstimate(person, estimateTotal), [person, estimateTotal]);
 
-  const assessedRows = [
-    { label: "Gross wages", key: "grossWages" as const },
-    { label: "PAYG withheld", key: "paygWithheld" as const },
-    { label: "Taxable income", key: "taxableIncome" as const },
-    { label: "Refund", key: "refund" as const },
+  // End-to-end return for a historical FY, on the selected basis.
+  // "lodged" = the assessed return (deductions implied by gross − taxable);
+  // "submitted" = re-run the waterfall on the workbook deduction total.
+  const yearReturn = (fy: number): ReturnComputation | null => {
+    const y = byFy.get(fy);
+    if (!y || y.grossWages == null) return null;
+    const gross = y.grossWages;
+    const payg = y.paygWithheld ?? 0;
+    if (basis === "lodged") {
+      if (y.taxableIncome == null) return null; // no assessment on file
+      const incomeTax = y.assessedIncomeTax ?? 0;
+      const medicare = y.assessedMedicare ?? 0;
+      const totalTax = incomeTax + medicare;
+      return {
+        assessableIncome: gross,
+        deductions: gross - y.taxableIncome,
+        taxableIncome: y.taxableIncome,
+        incomeTax,
+        lito: 0,
+        netIncomeTax: incomeTax,
+        medicareLevy: medicare,
+        totalTax,
+        paygWithheld: payg,
+        refund: y.refund ?? payg - totalTax,
+      };
+    }
+    return computeReturn({ assessableIncome: gross, deductions: y.submittedTotal, paygWithheld: payg });
+  };
+
+  const returnByFy = new Map<number, ReturnComputation | null>(fys.map((fy) => [fy, yearReturn(fy)]));
+
+  const waterfallRows: { label: string; key: keyof ReturnComputation; strong?: boolean; refund?: boolean }[] = [
+    { label: "Assessable income", key: "assessableIncome" },
+    { label: "less Deductions", key: "deductions" },
+    { label: "Taxable income", key: "taxableIncome", strong: true },
+    { label: "Income tax", key: "incomeTax" },
+    { label: "Medicare levy", key: "medicareLevy" },
+    { label: "Total tax", key: "totalTax", strong: true },
+    { label: "less PAYG withheld", key: "paygWithheld" },
+    { label: "Refund / (payable)", key: "refund", refund: true },
   ];
 
   const flags = history.years.flatMap((y) => (y.flags ?? []).map((f) => ({ fy: y.fy, text: f })));
@@ -81,23 +120,44 @@ export default function ClaimsHistory({
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b bg-gray-50 px-4 py-2.5">
         <div>
-          <h2 className="text-sm font-semibold">Claims history · submitted by category</h2>
+          <h2 className="text-sm font-semibold">Personal return · deductions & end-to-end refund</h2>
           <p className="text-[11px] text-gray-500">
-            From the personal workbooks given to the tax agent. {fyLabel(estimateFy)} is an editable estimate.
+            Deductions by category, then the full return to the refund. Toggle <b>As lodged</b> (assessed) vs{" "}
+            <b>Submitted</b> (workbook). {fyLabel(estimateFy)} is an editable estimate.
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-0.5 rounded-lg border bg-white p-0.5">
-          {PEOPLE.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPerson(p.key)}
-              className={`rounded-md px-3 py-1 text-xs font-medium ${
-                person === p.key ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-lg border bg-white p-0.5">
+            {PEOPLE.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setPerson(p.key)}
+                className={`rounded-md px-3 py-1 text-xs font-medium ${
+                  person === p.key ? "bg-indigo-50 text-indigo-700" : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-0.5 rounded-lg border bg-white p-0.5" title="Basis for the return breakdown below">
+            {(
+              [
+                { key: "lodged", label: "As lodged" },
+                { key: "submitted", label: "Submitted" },
+              ] as { key: Basis; label: string }[]
+            ).map((b) => (
+              <button
+                key={b.key}
+                onClick={() => setBasis(b.key)}
+                className={`rounded-md px-3 py-1 text-xs font-medium ${
+                  basis === b.key ? "bg-emerald-50 text-emerald-700" : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -184,13 +244,13 @@ export default function ClaimsHistory({
               })}
               <td className="px-4 py-1.5 text-right text-gray-300">—</td>
             </tr>
-            {/* Assessed by ATO — same table so columns stay aligned */}
+            {/* End-to-end return — same table so columns stay aligned */}
             <tr>
               <td
                 colSpan={fys.length + 2}
                 className="border-t-2 px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500"
               >
-                Assessed by ATO
+                End-to-end return · {basis === "lodged" ? "as lodged (assessed)" : "on submitted deductions"}
                 {refundEst && (
                   <span className="ml-1 font-normal normal-case text-indigo-600">
                     · {fyLabel(estimateFy)} estimated{" "}
@@ -201,39 +261,48 @@ export default function ClaimsHistory({
                 )}
               </td>
             </tr>
-            {assessedRows.map((row) => {
-              const est = refundEst ? refundEst[row.key] : undefined;
-              const isRefund = row.key === "refund";
-              return (
-                <tr key={row.key} className="text-sm">
-                  <td className="px-4 py-1 text-gray-600">{row.label}</td>
-                  {fys.map((fy) => {
-                    const v = byFy.get(fy)?.[row.key];
-                    return (
-                      <td
-                        key={fy}
-                        className={`px-4 py-1 text-right tabular ${
-                          isRefund && v ? "font-medium text-emerald-600" : ""
-                        }`}
-                      >
-                        {v != null ? money(v) : <span className="text-gray-300">—</span>}
-                      </td>
-                    );
-                  })}
-                  <td
-                    className={`px-4 py-1 text-right tabular ${
-                      est == null
-                        ? "text-gray-300"
-                        : isRefund
-                        ? "font-semibold text-emerald-600"
-                        : "text-indigo-700"
-                    }`}
-                  >
-                    {est != null ? money(Math.round(est)) : "—"}
-                  </td>
-                </tr>
-              );
-            })}
+            {waterfallRows.map((row) => (
+              <tr
+                key={row.key}
+                className={`text-sm ${row.strong ? "bg-gray-50/60 font-semibold" : ""} ${
+                  row.refund ? "border-t bg-emerald-50/30 font-semibold" : ""
+                }`}
+              >
+                <td className={`px-4 py-1 ${row.strong || row.refund ? "" : "text-gray-600"}`}>{row.label}</td>
+                {fys.map((fy) => {
+                  const r = returnByFy.get(fy);
+                  const v = r ? r[row.key] : undefined;
+                  return (
+                    <td
+                      key={fy}
+                      className={`px-4 py-1 text-right tabular ${
+                        row.refund && v != null ? (v >= 0 ? "text-emerald-600" : "text-rose-600") : ""
+                      }`}
+                    >
+                      {v != null ? money(Math.round(v)) : <span className="text-gray-300">—</span>}
+                    </td>
+                  );
+                })}
+                {(() => {
+                  const v = refundEst ? refundEst[row.key] : undefined;
+                  return (
+                    <td
+                      className={`px-4 py-1 text-right tabular ${
+                        v == null
+                          ? "text-gray-300"
+                          : row.refund
+                          ? v >= 0
+                            ? "text-emerald-600"
+                            : "text-rose-600"
+                          : "text-indigo-700"
+                      }`}
+                    >
+                      {v != null ? money(Math.round(v)) : "—"}
+                    </td>
+                  );
+                })()}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -252,12 +321,13 @@ export default function ClaimsHistory({
       )}
 
       <p className="border-t px-4 py-2 text-[11px] text-gray-400">
-        &ldquo;Submitted&rdquo; is what was given to the agent (personal workbooks). The {fyLabel(estimateFy)} column is
-        an estimate seeded from the mean of your last 3 years — grey figures are the suggestion, type to override (saved
-        automatically). The {fyLabel(estimateFy)} refund uses your finalised income statement (gross wages and PAYG
-        withheld) less your estimated deductions, taxed on the current resident scale + Medicare levy (ignores offsets,
-        HELP, MLS and investment income). The rental loss is carried from FY24-25 (&minus;$71,451) and assumes the Ocean
-        Grove loss sits on Lloyd&rsquo;s personal return. Reference only, not tax advice.
+        The category rows are what was <b>submitted</b> to the agent (personal workbooks). The end-to-end return shows{" "}
+        <b>As lodged</b> — the assessed figures from the ATO notice (deductions implied by gross − taxable income) — or{" "}
+        <b>Submitted</b>, which re-runs the waterfall on the workbook deduction total (the gap to the lodged refund is the
+        rental loss / other items not in the workbook). {fyLabel(estimateFy)} uses your finalised income statement less
+        your editable deductions, on the current resident scale + Medicare levy + LITO (ignores MLS, HELP, Div 293 and
+        non-wage income). Rental loss is carried from FY24-25 (&minus;$71,451), pending the Ocean Grove ownership
+        question. Reference only, not tax advice.
       </p>
     </div>
   );

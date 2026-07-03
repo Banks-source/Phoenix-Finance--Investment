@@ -41,6 +41,8 @@ export interface ClaimYear {
   grossWages?: number;
   paygWithheld?: number;
   taxableIncome?: number;
+  assessedIncomeTax?: number; // income tax per the assessment (before Medicare)
+  assessedMedicare?: number; // Medicare levy per the assessment
   refund?: number;
   flags?: string[];
   source: string;
@@ -142,6 +144,8 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
         grossWages: 222418.2,
         paygWithheld: 73084,
         taxableIncome: 158335,
+        assessedIncomeTax: 39921.95,
+        assessedMedicare: 3166.7,
         refund: 30013.35,
         flags: [
           "Assessed taxable income $158,335 sits well below gross wages $222,418 — the driver is the Ocean Grove rental loss (−$71,451), not these ~$9.5k work deductions. Confirm the loss belongs on Lloyd's personal return (Ocean Grove / Inalaa Pty Ltd ownership is unresolved).",
@@ -214,6 +218,8 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
         grossWages: 82145.28,
         paygWithheld: 17112,
         taxableIncome: 38990,
+        assessedIncomeTax: 3326.4,
+        assessedMedicare: 131.3,
         refund: 13654.3,
         flags: [
           "Assessed taxable income $38,990 is ~$43k below gross wages $82,145 — the driver is NOT these ~$1.4k work deductions and is not traced to a source document. Confirm the composition with the accountant.",
@@ -247,6 +253,11 @@ export const CLAIMS_ESTIMATE_INCOME: Partial<
     grossWages: 286154.65, // IAG income statement FY2025-26 · total gross
     paygWithheld: 100669.0, // PAYGW amount
     source: "ATO income statement FY2025-26 (IAG, tax ready, reported 02/07/2026)",
+  },
+  milani: {
+    grossWages: 82149.98, // Myer income statement FY2025-26 · total gross
+    paygWithheld: 17086.0, // PAYGW amount
+    source: "ATO income statement FY2025-26 (Myer, NOT tax ready, reported 18/06/2026)",
   },
 };
 
@@ -303,22 +314,67 @@ export function medicareLevy(taxable: number): number {
   return taxable > 27222 ? taxable * 0.02 : 0;
 }
 
-export interface RefundEstimate {
-  grossWages: number;
-  paygWithheld: number;
+/** Low Income Tax Offset (FY2024-25 onward). Reduces income tax, not below $0. */
+export function lowIncomeTaxOffset(taxable: number): number {
+  if (taxable <= 37500) return 700;
+  if (taxable <= 45000) return Math.max(0, 700 - (taxable - 37500) * 0.05);
+  if (taxable <= 66667) return Math.max(0, 325 - (taxable - 45000) * 0.015);
+  return 0;
+}
+
+/** Full end-to-end return waterfall, assessable income → refund. */
+export interface ReturnComputation {
+  assessableIncome: number;
+  deductions: number;
   taxableIncome: number;
-  refund: number;
+  incomeTax: number; // gross income tax on taxable income
+  lito: number; // low income tax offset (reduces tax)
+  netIncomeTax: number; // incomeTax − lito, floored at 0
+  medicareLevy: number;
+  totalTax: number; // netIncomeTax + Medicare
+  paygWithheld: number;
+  refund: number; // paygWithheld − totalTax (negative = amount payable)
+}
+
+/** Compute the resident individual return waterfall from income, deductions and PAYG. */
+export function computeReturn(input: {
+  assessableIncome: number;
+  deductions: number;
+  paygWithheld: number;
+}): ReturnComputation {
+  const assessableIncome = Math.max(0, input.assessableIncome);
+  const deductions = Math.max(0, input.deductions);
+  const taxableIncome = Math.max(0, assessableIncome - deductions);
+  const incomeTax = auResidentTax(taxableIncome);
+  const lito = lowIncomeTaxOffset(taxableIncome);
+  const netIncomeTax = Math.max(0, incomeTax - lito);
+  const medicare = medicareLevy(taxableIncome);
+  const totalTax = netIncomeTax + medicare;
+  return {
+    assessableIncome,
+    deductions,
+    taxableIncome,
+    incomeTax,
+    lito,
+    netIncomeTax,
+    medicareLevy: medicare,
+    totalTax,
+    paygWithheld: input.paygWithheld,
+    refund: input.paygWithheld - totalTax,
+  };
+}
+
+export interface RefundEstimate extends ReturnComputation {
   basisFy: number; // the year gross/PAYG were sourced from
   isActual: boolean; // true when using a finalised income statement, not a prior-year seed
 }
 
 /**
- * Rough estimated refund for the planning year. Uses the actual income
+ * Estimated end-to-end return for the planning year. Uses the actual income
  * statement in `CLAIMS_ESTIMATE_INCOME` when available, otherwise seeds gross
- * wages and PAYG from the person's most recent documented year. Subtracts the
- * estimated deductions to get taxable income, then refund = PAYG − (income tax
- * + Medicare levy). Returns null if there's no income to work from.
- * Reference only — ignores offsets, HELP, MLS, Div 293 and investment income.
+ * wages and PAYG from the person's most recent documented year, then runs the
+ * full waterfall (deductions → taxable → tax − LITO + Medicare → refund).
+ * Reference only — ignores MLS, HELP, Div 293 and non-wage income.
  */
 export function claimsRefundEstimate(
   person: ClaimPerson,
@@ -340,7 +396,6 @@ export function claimsRefundEstimate(
     paygWithheld = src.paygWithheld!;
     basisFy = src.fy;
   }
-  const taxableIncome = Math.max(0, grossWages - Math.max(0, deductionsTotal));
-  const tax = auResidentTax(taxableIncome) + medicareLevy(taxableIncome);
-  return { grossWages, paygWithheld, taxableIncome, refund: paygWithheld - tax, basisFy, isActual: !!actual };
+  const comp = computeReturn({ assessableIncome: grossWages, deductions: deductionsTotal, paygWithheld });
+  return { ...comp, basisFy, isActual: !!actual };
 }
