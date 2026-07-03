@@ -3,10 +3,11 @@ import PeriodSelector from "@/components/PeriodSelector";
 import YoyMatrix from "@/components/YoyMatrix";
 import ClaimsHistory from "@/components/ClaimsHistory";
 import { PageHeader, StatCard, EmptyState } from "@/components/ui";
-import { getAvailablePeriods, fetchTypeTotals, fetchClaimTotals, fetchCategoryYoY } from "@/lib/queries";
+import { getAvailablePeriods, fetchTypeTotals, fetchClaimTotals, fetchCategoryYoY, fetchClaimEstimates } from "@/lib/queries";
 import { parsePeriod, periodLabel, fyLabel, EXPENSE_TYPES } from "@/lib/fy";
 import { money, TYPE_COLORS } from "@/lib/format";
 import { taxLabel } from "@/lib/taxcats";
+import { CLAIMS_ESTIMATE_FY } from "@/lib/claimsHistory";
 import { Download, ListChecks } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -28,11 +29,21 @@ export default async function TaxPage({
   // Up to 5 most recent FYs for the year-over-year matrix.
   const yoyFys = fys.slice(0, 5);
 
-  const [totals, claimTotals, yoy] = await Promise.all([
+  const [totals, claimTotals, yoy, estimates] = await Promise.all([
     fetchTypeTotals(period),
     fetchClaimTotals(period),
     fetchCategoryYoY(yoyFys),
+    fetchClaimEstimates(CLAIMS_ESTIMATE_FY),
   ]);
+
+  // Group manual estimate overrides by person + category for the history table.
+  const estimateOverrides: { lloyd: Record<string, number>; milani: Record<string, number> } = {
+    lloyd: {},
+    milani: {},
+  };
+  for (const e of estimates) {
+    if (e.person === "lloyd" || e.person === "milani") estimateOverrides[e.person][e.category] = Number(e.amount);
+  }
 
   const income = totals.income ?? 0;
   const expenses = EXPENSE_TYPES.reduce((s, t) => s + Math.abs(totals[t] ?? 0), 0);
@@ -143,7 +154,7 @@ export default async function TaxPage({
       {yoy.length > 0 && <YoyMatrix rows={yoy} fys={yoyFys} />}
 
       {/* Historical claims (submitted vs assessed) */}
-      <ClaimsHistory />
+      <ClaimsHistory estimateFy={CLAIMS_ESTIMATE_FY} initialOverrides={estimateOverrides} />
 
       <p className="text-xs text-gray-400">
         {period.kind === "fy" ? `${fyLabel(period.value!)} runs 1 Jul ${period.value! - 1} → 30 Jun ${period.value}. ` : ""}

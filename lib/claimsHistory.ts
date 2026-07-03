@@ -229,3 +229,32 @@ export function claimsHistoryFys(): number[] {
   for (const p of CLAIMS_HISTORY) for (const y of p.years) set.add(y.fy);
   return [...set].sort((a, b) => a - b);
 }
+
+/** The financial year the app builds an estimate for (FY25-26, ended 30 Jun 2026). */
+export const CLAIMS_ESTIMATE_FY = 2026;
+
+/**
+ * Suggested estimate per category for the next year: the mean of the most
+ * recent `lookback` years that actually reported that category, rounded to the
+ * nearest dollar. Categories with no history are omitted. This is only a
+ * starting point — the UI lets the figure be overridden and saved.
+ */
+export function claimsHistoryEstimate(
+  person: ClaimPerson,
+  lookback = 3
+): Partial<Record<ClaimCategory, number>> {
+  const h = CLAIMS_HISTORY.find((p) => p.person === person);
+  const out: Partial<Record<ClaimCategory, number>> = {};
+  if (!h) return out;
+  const yearsDesc = [...h.years].sort((a, b) => b.fy - a.fy);
+  for (const cat of CLAIM_CATEGORY_ORDER) {
+    const vals: number[] = [];
+    for (const y of yearsDesc) {
+      const v = y.lines[cat];
+      if (v && v > 0) vals.push(v);
+      if (vals.length >= lookback) break;
+    }
+    if (vals.length) out[cat] = Math.round(vals.reduce((s, v) => s + v, 0) / vals.length);
+  }
+  return out;
+}

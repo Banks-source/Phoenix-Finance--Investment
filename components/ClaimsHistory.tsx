@@ -1,6 +1,12 @@
 "use client";
-import { useState } from "react";
-import { CLAIMS_HISTORY, CLAIM_CATEGORY_ORDER, claimsHistoryFys, ClaimPerson } from "@/lib/claimsHistory";
+import { useMemo, useState } from "react";
+import {
+  CLAIMS_HISTORY,
+  CLAIM_CATEGORY_ORDER,
+  claimsHistoryFys,
+  claimsHistoryEstimate,
+  ClaimPerson,
+} from "@/lib/claimsHistory";
 import { money } from "@/lib/format";
 import { fyLabel } from "@/lib/fy";
 import { AlertTriangle } from "lucide-react";
@@ -10,24 +16,64 @@ const PEOPLE: { key: ClaimPerson; label: string }[] = [
   { key: "milani", label: "Milani" },
 ];
 
-export default function ClaimsHistory() {
+type Overrides = Record<ClaimPerson, Partial<Record<string, number>>>;
+
+export default function ClaimsHistory({
+  estimateFy,
+  initialOverrides,
+}: {
+  estimateFy: number;
+  initialOverrides: Overrides;
+}) {
   const [person, setPerson] = useState<ClaimPerson>("lloyd");
+  const [overrides, setOverrides] = useState<Overrides>(
+    initialOverrides ?? { lloyd: {}, milani: {} }
+  );
+  const [saving, setSaving] = useState<string | null>(null);
+
   const fys = claimsHistoryFys();
   const history = CLAIMS_HISTORY.find((p) => p.person === person)!;
   const byFy = new Map(history.years.map((y) => [y.fy, y]));
+  const computed = useMemo(() => claimsHistoryEstimate(person), [person]);
 
   const cell = (fy: number, cat: (typeof CLAIM_CATEGORY_ORDER)[number]) => byFy.get(fy)?.lines[cat] ?? 0;
-  // Only show category rows that have a value in at least one year.
-  const rows = CLAIM_CATEGORY_ORDER.filter((cat) => fys.some((fy) => cell(fy, cat) > 0));
+
+  // Effective FY-estimate for a category = manual override, else computed suggestion.
+  const effEstimate = (cat: string) => overrides[person]?.[cat] ?? computed[cat as keyof typeof computed] ?? 0;
+  const estimateTotal = CLAIM_CATEGORY_ORDER.reduce((s, cat) => s + effEstimate(cat), 0);
 
   const flags = history.years.flatMap((y) => (y.flags ?? []).map((f) => ({ fy: y.fy, text: f })));
+
+  async function saveEstimate(cat: string, raw: string) {
+    const trimmed = raw.trim();
+    const amount = trimmed === "" ? null : Number(trimmed);
+    if (amount != null && (!Number.isFinite(amount) || amount < 0)) return;
+    setSaving(cat);
+    try {
+      await fetch("/api/claim-estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ person, fy: estimateFy, category: cat, amount }),
+      });
+      setOverrides((prev) => {
+        const next = { ...prev, [person]: { ...prev[person] } };
+        if (amount == null) delete next[person][cat];
+        else next[person][cat] = amount;
+        return next;
+      });
+    } finally {
+      setSaving(null);
+    }
+  }
 
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b bg-gray-50 px-4 py-2.5">
         <div>
           <h2 className="text-sm font-semibold">Claims history · submitted by category</h2>
-          <p className="text-[11px] text-gray-500">From the personal workbooks given to the tax agent (FY21–FY25)</p>
+          <p className="text-[11px] text-gray-500">
+            From the personal workbooks given to the tax agent. {fyLabel(estimateFy)} is an editable estimate.
+          </p>
         </div>
         <div className="ml-auto flex items-center gap-0.5 rounded-lg border bg-white p-0.5">
           {PEOPLE.map((p) => (
@@ -54,25 +100,44 @@ export default function ClaimsHistory() {
                   {fyLabel(fy)}
                 </th>
               ))}
+              <th className="px-4 py-2 text-right font-medium text-indigo-600">{fyLabel(estimateFy)} · est.</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {rows.map((cat) => (
-              <tr key={cat} className="hover:bg-gray-50/60">
-                <td className="px-4 py-2 font-medium">{cat}</td>
-                {fys.map((fy) => {
-                  const v = cell(fy, cat);
-                  return (
-                    <td key={fy} className="px-4 py-2 text-right tabular">
-                      {v > 0 ? money(v) : <span className="text-gray-300">—</span>}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-            {/* Submitted total */}
+            {CLAIM_CATEGORY_ORDER.map((cat) => {
+              const ov = overrides[person]?.[cat];
+              const suggestion = computed[cat as keyof typeof computed];
+              return (
+                <tr key={cat} className="hover:bg-gray-50/60">
+                  <td className="px-4 py-2 font-medium">{cat}</td>
+                  {fys.map((fy) => {
+                    const v = cell(fy, cat);
+                    return (
+                      <td key={fy} className="px-4 py-2 text-right tabular">
+                        {v > 0 ? money(v) : <span className="text-gray-300">—</span>}
+                      </td>
+                    );
+                  })}
+                  <td className="px-2 py-1.5 text-right">
+                    <input
+                      key={`${person}-${cat}`}
+                      type="number"
+                      min={0}
+                      inputMode="decimal"
+                      defaultValue={ov ?? ""}
+                      placeholder={suggestion ? String(suggestion) : "0"}
+                      onBlur={(e) => saveEstimate(cat, e.target.value)}
+                      className={`w-24 rounded-md border px-2 py-1 text-right tabular focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300 ${
+                        ov != null ? "border-indigo-300 bg-indigo-50/40 font-medium text-indigo-800" : "border-gray-200"
+                      } ${saving === cat ? "opacity-60" : ""}`}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+            {/* Totals */}
             <tr className="border-t-2 bg-gray-50/60 font-semibold">
-              <td className="px-4 py-2">Total submitted</td>
+              <td className="px-4 py-2">Total</td>
               {fys.map((fy) => {
                 const y = byFy.get(fy);
                 return (
@@ -81,6 +146,7 @@ export default function ClaimsHistory() {
                   </td>
                 );
               })}
+              <td className="px-4 py-2 text-right tabular text-indigo-700">{money(estimateTotal)}</td>
             </tr>
             {/* Method-basis metrics */}
             <tr className="text-xs text-gray-500">
@@ -93,6 +159,7 @@ export default function ClaimsHistory() {
                   </td>
                 );
               })}
+              <td className="px-4 py-1.5 text-right text-gray-300">—</td>
             </tr>
             <tr className="text-xs text-gray-500">
               <td className="px-4 py-1.5">Car (logbook / km)</td>
@@ -104,6 +171,7 @@ export default function ClaimsHistory() {
                   </td>
                 );
               })}
+              <td className="px-4 py-1.5 text-right text-gray-300">—</td>
             </tr>
           </tbody>
         </table>
@@ -135,6 +203,7 @@ export default function ClaimsHistory() {
                     </td>
                   );
                 })}
+                <td className="py-1 pl-4 text-right text-gray-300">—</td>
               </tr>
             ))}
           </tbody>
@@ -155,9 +224,10 @@ export default function ClaimsHistory() {
       )}
 
       <p className="border-t px-4 py-2 text-[11px] text-gray-400">
-        &ldquo;Submitted&rdquo; is what was given to the agent (personal workbooks). Category-level <em>as-lodged</em>{" "}
-        figures from the consolidated booklets aren&rsquo;t extracted yet — where the agent lodged the workbook
-        unchanged, claimed equals submitted. Figures are reference only, not tax advice.
+        &ldquo;Submitted&rdquo; is what was given to the agent (personal workbooks). The {fyLabel(estimateFy)} column is
+        an estimate seeded from the mean of your last 3 years — grey figures are the suggestion, type to override (saved
+        automatically). Category-level <em>as-lodged</em> figures from the booklets aren&rsquo;t extracted yet. Reference
+        only, not tax advice.
       </p>
     </div>
   );

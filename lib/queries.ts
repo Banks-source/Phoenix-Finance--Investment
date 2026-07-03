@@ -218,6 +218,27 @@ export async function fetchClaimTotals(period: PeriodFilter, owner?: string): Pr
   return [...map.values()].sort((a, b) => b.amount - a.amount);
 }
 
+export interface ClaimEstimate {
+  person: string;
+  fy: number;
+  category: string;
+  amount: number;
+}
+
+/** Manual/override FY estimates by person + category. Empty until migration 0003. */
+export async function fetchClaimEstimates(fy: number): Promise<ClaimEstimate[]> {
+  try {
+    return await fetchAll<ClaimEstimate>((c) =>
+      c.from("claim_estimates").select("person, fy, category, amount").eq("fy", fy)
+    );
+  } catch (e: unknown) {
+    const code = (e as { code?: string })?.code;
+    // Table missing until migration 0003 (42P01 = Postgres, PGRST205 = PostgREST cache).
+    if (code === "42P01" || code === "PGRST205") return [];
+    throw e;
+  }
+}
+
 export interface YoyCell {
   all: number;
   lloyd: number;
