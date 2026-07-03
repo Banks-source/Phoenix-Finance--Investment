@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "backfill": "tsx scripts/backfill.ts"
+    "backfill": "tsx scripts/backfill.ts",
+    "analyse": "tsx scripts/analyse.ts",
+    "validate": "tsx scripts/validate.ts"
   },
   "dependencies": {
     "next": "14.2.5",

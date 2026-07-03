@@ -1,18 +1,37 @@
 "use client";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { EXPENSE_TYPES } from "@/lib/fy";
+import { TxnType } from "@/lib/taxonomy";
+import { money, TYPE_COLORS, typeLabel } from "@/lib/format";
 
-export default function DeficitChart({ data }: { data: { month: string; net: number }[] }) {
+// Horizontal bar breakdown of where money went for the period.
+export default function DeficitChart({ totals }: { totals: Record<string, number> }) {
+  const expenses = EXPENSE_TYPES.map((t) => ({
+    type: t as TxnType,
+    value: Math.abs(totals[t] ?? 0),
+  })).filter((e) => e.value > 0);
+
+  const max = Math.max(1, ...expenses.map((e) => e.value));
+
+  if (expenses.length === 0) {
+    return <p className="text-sm text-gray-500">No expense data for this period.</p>;
+  }
+
   return (
-    <div className="h-64 rounded-lg border border-neutral-800 p-2">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
-          <XAxis dataKey="month" stroke="#737373" fontSize={12} />
-          <YAxis stroke="#737373" fontSize={12} />
-          <Tooltip contentStyle={{ background: "#171717", border: "1px solid #404040" }} />
-          <Line type="monotone" dataKey="net" stroke="#22c55e" strokeWidth={2} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
+    <div className="space-y-3">
+      {expenses.map((e) => (
+        <div key={e.type}>
+          <div className="mb-1 flex items-center justify-between text-sm">
+            <span className="font-medium">{typeLabel(e.type)}</span>
+            <span className="tabular text-gray-600">{money(e.value)}</span>
+          </div>
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${(e.value / max) * 100}%`, backgroundColor: TYPE_COLORS[e.type] }}
+            />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

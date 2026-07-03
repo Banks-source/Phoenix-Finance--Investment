@@ -4,3 +4,9 @@ node_modules/
 .env.local
 .vercel
 *.log
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# Sensitive financial data — never commit
+data/
+out/
