@@ -1,59 +1,107 @@
-import { createServiceClient } from "@/lib/supabase/server";
-import { TYPE_LABELS } from "@/lib/taxonomy";
+import PeriodSelector from "@/components/PeriodSelector";
+import TransactionsTable from "@/components/TransactionsTable";
+import { PageHeader, EmptyState } from "@/components/ui";
+import { getAvailablePeriods, fetchTransactions } from "@/lib/queries";
+import { parsePeriod, periodLabel } from "@/lib/fy";
+import Link from "next/link";
 
-// Transactions tab: full ledger with filter/search.
+export const dynamic = "force-dynamic";
+
+const PAGE_SIZE = 100;
+
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: { owner?: string; type?: string };
+  searchParams: { period?: string; value?: string; search?: string; category?: string; owner?: string; page?: string };
 }) {
-  const supabase = createServiceClient();
-  let query = supabase
-    .from("transactions")
-    .select("date, amount, owner, merchant, category, sub_category, type, status")
-    .order("date", { ascending: false })
-    .limit(100);
+  const page = Math.max(1, Number(searchParams.page ?? 1));
+  const offset = (page - 1) * PAGE_SIZE;
 
-  if (searchParams.owner) query = query.eq("owner", searchParams.owner);
-  if (searchParams.type) query = query.eq("type", searchParams.type);
+  const { years, fys } = await getAvailablePeriods();
 
-  const { data: rows } = await query;
+  // Default to the most recent financial year if no period chosen.
+  const effective =
+    !searchParams.period && fys.length > 0
+      ? { period: "fy", value: String(fys[0]) }
+      : searchParams;
+  const period = parsePeriod(effective);
+
+  const { rows, count } = await fetchTransactions({
+    period,
+    status: "approved",
+    search: searchParams.search,
+    owner: searchParams.owner,
+    limit: PAGE_SIZE,
+    offset,
+  });
+
+  const filtered = searchParams.category
+    ? rows.filter((r) => r.category === searchParams.category)
+    : rows;
+
+  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
+  const baseParams = (extra: Record<string, string>) => {
+    const p = new URLSearchParams();
+    if (searchParams.period) p.set("period", searchParams.period);
+    if (searchParams.value) p.set("value", searchParams.value);
+    if (searchParams.search) p.set("search", searchParams.search);
+    if (searchParams.owner) p.set("owner", searchParams.owner);
+    if (searchParams.category) p.set("category", searchParams.category);
+    Object.entries(extra).forEach(([k, v]) => p.set(k, v));
+    return p.toString();
+  };
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Transactions</h1>
-      <div className="flex gap-2 text-xs text-neutral-400">
-        <a href="/transactions" className="hover:text-white">All</a>
-        <a href="/transactions?owner=lloyd" className="hover:text-white">Lloyd</a>
-        <a href="/transactions?owner=milani" className="hover:text-white">Milani</a>
-        {Object.entries(TYPE_LABELS).map(([k, l]) => (
-          <a key={k} href={`/transactions?type=${k}`} className="hover:text-white">{l}</a>
-        ))}
-      </div>
-      <table className="w-full text-sm">
-        <thead className="text-left text-neutral-400">
-          <tr>
-            <th className="py-2">Date</th>
-            <th className="py-2">Owner</th>
-            <th className="py-2">Merchant</th>
-            <th className="py-2">Category</th>
-            <th className="py-2">Type</th>
-            <th className="py-2 text-right">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(rows ?? []).map((r, i) => (
-            <tr key={i} className="border-t border-neutral-800">
-              <td className="py-2">{r.date}</td>
-              <td className="py-2 capitalize">{r.owner}</td>
-              <td className="py-2">{r.merchant}</td>
-              <td className="py-2">{r.category}</td>
-              <td className="py-2">{TYPE_LABELS[r.type as keyof typeof TYPE_LABELS]}</td>
-              <td className="py-2 text-right">${Number(r.amount).toLocaleString()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-6">
+      <PageHeader
+        title="Transactions"
+        subtitle={`${count.toLocaleString()} approved · ${periodLabel(period)}${searchParams.category ? ` · ${searchParams.category}` : ""}`}
+        actions={<PeriodSelector years={years} fys={fys} fallback={fys.length > 0 ? `fy:${fys[0]}` : undefined} />}
+      />
+
+      <form className="flex flex-wrap items-center gap-2" action="/transactions">
+        {searchParams.period && <input type="hidden" name="period" value={searchParams.period} />}
+        {searchParams.value && <input type="hidden" name="value" value={searchParams.value} />}
+        <input
+          name="search"
+          placeholder="Search detail or merchant…"
+          defaultValue={searchParams.search ?? ""}
+          className="input w-64"
+        />
+        <select name="owner" defaultValue={searchParams.owner ?? ""} className="select">
+          <option value="">All owners</option>
+          <option value="lloyd">Lloyd</option>
+          <option value="milani">Milani</option>
+          <option value="joint">Joint</option>
+        </select>
+        <button className="btn-primary" type="submit">Filter</button>
+        {(searchParams.search || searchParams.owner || searchParams.category) && (
+          <Link className="btn-ghost" href={`/transactions?${baseParams({}).replace(/(search|owner|category)=[^&]*&?/g, "")}`}>
+            Clear
+          </Link>
+        )}
+      </form>
+
+      {filtered.length === 0 ? (
+        <EmptyState>No transactions match these filters.</EmptyState>
+      ) : (
+        <>
+          <TransactionsTable rows={filtered} />
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">Page {page} of {totalPages}</span>
+              <div className="flex gap-2">
+                {page > 1 && (
+                  <Link className="btn-ghost" href={`/transactions?${baseParams({ page: String(page - 1) })}`}>Previous</Link>
+                )}
+                {page < totalPages && (
+                  <Link className="btn-ghost" href={`/transactions?${baseParams({ page: String(page + 1) })}`}>Next</Link>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
