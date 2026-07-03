@@ -1,15 +1,9 @@
 import Link from "next/link";
 import PeriodSelector from "@/components/PeriodSelector";
 import YoyMatrix from "@/components/YoyMatrix";
-import { PageHeader, StatCard, TypeBadge, EmptyState } from "@/components/ui";
-import {
-  getAvailablePeriods,
-  fetchTypeTotals,
-  fetchCategoryTotals,
-  fetchAllTransactions,
-  fetchClaimTotals,
-  fetchCategoryYoY,
-} from "@/lib/queries";
+import ClaimsHistory from "@/components/ClaimsHistory";
+import { PageHeader, StatCard, EmptyState } from "@/components/ui";
+import { getAvailablePeriods, fetchTypeTotals, fetchClaimTotals, fetchCategoryYoY } from "@/lib/queries";
 import { parsePeriod, periodLabel, fyLabel, EXPENSE_TYPES } from "@/lib/fy";
 import { money, TYPE_COLORS } from "@/lib/format";
 import { taxLabel } from "@/lib/taxcats";
@@ -34,10 +28,8 @@ export default async function TaxPage({
   // Up to 5 most recent FYs for the year-over-year matrix.
   const yoyFys = fys.slice(0, 5);
 
-  const [totals, categories, incomeRows, claimTotals, yoy] = await Promise.all([
+  const [totals, claimTotals, yoy] = await Promise.all([
     fetchTypeTotals(period),
-    fetchCategoryTotals(period),
-    fetchAllTransactions({ period, status: "approved", type: "income" }),
     fetchClaimTotals(period),
     fetchCategoryYoY(yoyFys),
   ]);
@@ -61,16 +53,7 @@ export default async function TaxPage({
   }
   const bucketRows = [...claimsByBucket.entries()].sort((a, b) => b[1].total - a[1].total);
 
-  // Group income by detail/merchant for the return.
-  const incomeByLine = new Map<string, number>();
-  for (const r of incomeRows.rows) {
-    const key = r.merchant || r.detail || "Other income";
-    incomeByLine.set(key, (incomeByLine.get(key) ?? 0) + Number(r.amount));
-  }
-  const incomeLines = [...incomeByLine.entries()].sort((a, b) => b[1] - a[1]);
-
   const exportQs = new URLSearchParams(effective as Record<string, string>);
-  const exportHref = `/api/export?${exportQs.toString()}`;
   const claimsExportQs = new URLSearchParams(exportQs);
   claimsExportQs.set("mode", "claims");
   const claimsExportHref = `/api/export?${claimsExportQs.toString()}`;
@@ -159,43 +142,8 @@ export default async function TaxPage({
       {/* Year-over-year matrix */}
       {yoy.length > 0 && <YoyMatrix rows={yoy} fys={yoyFys} />}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="card p-5">
-          <h2 className="mb-3 text-sm font-semibold">Income detail</h2>
-          {incomeLines.length === 0 ? (
-            <EmptyState>No income recorded for this period.</EmptyState>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {incomeLines.map(([label, amt]) => (
-                <div key={label} className="flex items-center justify-between py-2 text-sm">
-                  <span className="truncate pr-3">{label}</span>
-                  <span className="tabular font-medium text-emerald-600">{money(amt)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="card p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Category breakdown</h2>
-            <a href={exportHref} className="btn-ghost !py-1 text-xs">
-              <Download size={14} /> All CSV
-            </a>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {categories.map((c) => (
-              <div key={c.category} className="flex items-center justify-between py-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <TypeBadge type={c.type} />
-                  {c.category}
-                </span>
-                <span className="tabular font-medium">{money(c.net, { sign: true })}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* Historical claims (submitted vs assessed) */}
+      <ClaimsHistory />
 
       <p className="text-xs text-gray-400">
         {period.kind === "fy" ? `${fyLabel(period.value!)} runs 1 Jul ${period.value! - 1} → 30 Jun ${period.value}. ` : ""}

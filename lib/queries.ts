@@ -188,16 +188,24 @@ export interface ClaimTotal {
 /** Sum of confirmed deductions (deductible=true) grouped by tax_category + owner. */
 export async function fetchClaimTotals(period: PeriodFilter, owner?: string): Promise<ClaimTotal[]> {
   const b = periodBounds(period);
-  const rows = await fetchAll<{ tax_category: string | null; owner: string; amount: number }>((c) => {
-    let q = c
-      .from("transactions")
-      .select("tax_category, owner, amount")
-      .eq("status", "approved")
-      .eq("deductible", true);
-    if (b) q = q.gte("date", b[0]).lte("date", b[1]);
-    if (owner) q = q.eq("owner", owner);
-    return q;
-  });
+  let rows: { tax_category: string | null; owner: string; amount: number }[];
+  try {
+    rows = await fetchAll<{ tax_category: string | null; owner: string; amount: number }>((c) => {
+      let q = c
+        .from("transactions")
+        .select("tax_category, owner, amount")
+        .eq("status", "approved")
+        .eq("deductible", true);
+      if (b) q = q.gte("date", b[0]).lte("date", b[1]);
+      if (owner) q = q.eq("owner", owner);
+      return q;
+    });
+  } catch (e: unknown) {
+    // Tax columns don't exist until migration 0002 is applied — degrade to empty
+    // so the rest of the tax page (history, YoY) still renders.
+    if ((e as { code?: string })?.code === "42703") return [];
+    throw e;
+  }
   const map = new Map<string, ClaimTotal>();
   for (const r of rows) {
     const code = r.tax_category ?? "unassigned";
