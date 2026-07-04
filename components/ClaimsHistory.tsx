@@ -13,7 +13,9 @@ import {
 } from "@/lib/claimsHistory";
 import { money } from "@/lib/format";
 import { fyLabel } from "@/lib/fy";
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { taxLabel } from "@/lib/taxcats";
+import type { TaggedClaim } from "@/lib/queries";
+import { AlertTriangle, ChevronRight, Link2 } from "lucide-react";
 
 const PEOPLE: { key: ClaimPerson; label: string }[] = [
   { key: "lloyd", label: "Lloyd" },
@@ -26,12 +28,15 @@ type Basis = "lodged" | "submitted";
 export default function ClaimsHistory({
   estimateFy,
   initialOverrides,
+  taggedClaims = [],
 }: {
   estimateFy: number;
   initialOverrides: Overrides;
+  taggedClaims?: TaggedClaim[];
 }) {
   const [person, setPerson] = useState<ClaimPerson>("lloyd");
   const [basis, setBasis] = useState<Basis>("lodged");
+  const [showLinked, setShowLinked] = useState(false);
   const [overrides, setOverrides] = useState<Overrides>(
     initialOverrides ?? { lloyd: {}, milani: {} }
   );
@@ -150,6 +155,21 @@ export default function ClaimsHistory({
 
   const flags = history.years.flatMap((y) => (y.flags ?? []).map((f) => ({ fy: y.fy, text: f })));
 
+  // FY26 transactions tagged to the selected person, grouped by ATO code — the
+  // live "linked" basis behind the editable estimate. Revealed by the toggle.
+  const linkedGroups = useMemo(() => {
+    const mine = taggedClaims.filter((t) => t.owner === person);
+    const m = new Map<string, { code: string; total: number; items: TaggedClaim[] }>();
+    for (const t of mine) {
+      const g = m.get(t.tax_category) ?? { code: t.tax_category, total: 0, items: [] };
+      g.total += t.amount;
+      g.items.push(t);
+      m.set(t.tax_category, g);
+    }
+    return [...m.values()].sort((a, b) => b.total - a.total);
+  }, [taggedClaims, person]);
+  const linkedTotal = linkedGroups.reduce((s, g) => s + g.total, 0);
+
   async function saveEstimate(cat: string, raw: string) {
     const trimmed = raw.trim();
     const amount = trimmed === "" ? null : Number(trimmed);
@@ -214,6 +234,18 @@ export default function ClaimsHistory({
               </button>
             ))}
           </div>
+          <button
+            onClick={() => setShowLinked((v) => !v)}
+            title="Show the FY26 transactions tagged to this person that feed the estimate"
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+              showLinked ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            <Link2 size={14} /> Linked claims
+            {linkedGroups.length > 0 && (
+              <span className="rounded-full bg-indigo-100 px-1.5 text-[10px] text-indigo-700">{money(linkedTotal)}</span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -402,6 +434,52 @@ export default function ClaimsHistory({
           </tbody>
         </table>
       </div>
+
+      {showLinked && (
+        <div className="border-t bg-indigo-50/30 px-4 py-3">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700">
+            <Link2 size={14} className="text-indigo-600" />
+            {fyLabel(estimateFy)} linked claims · {PEOPLE.find((p) => p.key === person)?.label}
+            <span className="ml-auto tabular text-indigo-700">{money(linkedTotal)} tagged</span>
+          </div>
+          {linkedGroups.length === 0 ? (
+            <p className="text-xs text-gray-500">
+              No {fyLabel(estimateFy)} transactions tagged to {PEOPLE.find((p) => p.key === person)?.label} yet. Tag them
+              in the claims builder — assign the person and an ATO sub-category (D5, D2…) and they&rsquo;ll appear here.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {linkedGroups.map((g) => (
+                <details key={g.code} className="rounded-lg border bg-white">
+                  <summary className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs">
+                    <ChevronRight size={12} className="shrink-0 text-gray-400" />
+                    <span className="font-mono text-[10px] text-gray-400">{g.code}</span>
+                    <span className="font-medium">{taxLabel(g.code)}</span>
+                    <span className="text-gray-400">
+                      {g.items.length} {g.items.length === 1 ? "txn" : "txns"}
+                    </span>
+                    <span className="ml-auto tabular font-semibold">{money(g.total)}</span>
+                  </summary>
+                  <div className="divide-y divide-gray-100 border-t">
+                    {g.items.map((t) => (
+                      <div key={t.id} className="flex items-center gap-3 px-3 py-1.5 text-xs">
+                        <span className="w-20 shrink-0 text-gray-400 tabular">{t.date}</span>
+                        <span className="min-w-0 flex-1 truncate">{t.merchant}</span>
+                        <span className="tabular text-gray-600">{money(t.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-[11px] text-gray-400">
+            These are the actual FY26 transactions you tagged (deductible, by ATO sub-category). The editable{" "}
+            {fyLabel(estimateFy)} column above is your estimate/override — it stays linked to these so you can reconcile
+            the two.
+          </p>
+        </div>
+      )}
 
       {flags.length > 0 && (
         <div className="space-y-1.5 border-t bg-amber-50/50 px-4 py-3">

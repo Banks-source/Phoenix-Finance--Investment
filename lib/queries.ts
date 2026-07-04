@@ -218,6 +218,58 @@ export async function fetchClaimTotals(period: PeriodFilter, owner?: string): Pr
   return [...map.values()].sort((a, b) => b.amount - a.amount);
 }
 
+export interface TaggedClaim {
+  id: string;
+  date: string;
+  merchant: string;
+  owner: string;
+  tax_category: string;
+  amount: number; // absolute claimed value
+}
+
+/**
+ * Individual confirmed deductions (deductible=true, with a tax_category) in a
+ * period — used to show the transactions LINKED to the FY estimate. Returns the
+ * rows themselves (not just totals) so the history table can reveal them.
+ */
+export async function fetchTaggedClaims(period: PeriodFilter, owner?: string): Promise<TaggedClaim[]> {
+  const b = periodBounds(period);
+  try {
+    const rows = await fetchAll<{
+      id: string;
+      date: string;
+      merchant: string | null;
+      detail: string | null;
+      owner: string;
+      tax_category: string | null;
+      amount: number;
+    }>((c) => {
+      let q = c
+        .from("transactions")
+        .select("id, date, merchant, detail, owner, tax_category, amount")
+        .eq("status", "approved")
+        .eq("deductible", true)
+        .not("tax_category", "is", null);
+      if (b) q = q.gte("date", b[0]).lte("date", b[1]);
+      if (owner) q = q.eq("owner", owner);
+      return q.order("date", { ascending: false });
+    });
+    return rows
+      .filter((r) => r.tax_category && r.tax_category !== "not_deductible")
+      .map((r) => ({
+        id: r.id,
+        date: r.date,
+        merchant: r.merchant || r.detail || "—",
+        owner: r.owner,
+        tax_category: r.tax_category as string,
+        amount: Math.abs(Number(r.amount)),
+      }));
+  } catch (e: unknown) {
+    if ((e as { code?: string })?.code === "42703") return [];
+    throw e;
+  }
+}
+
 export interface ClaimEstimate {
   person: string;
   fy: number;

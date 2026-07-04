@@ -21,6 +21,29 @@ async function post(body: unknown) {
 
 const BUCKETS = deductibleBucketsBySchedule();
 
+const OWNERS: { key: string; label: string }[] = [
+  { key: "lloyd", label: "Lloyd" },
+  { key: "milani", label: "Milani" },
+];
+
+function OwnerToggle({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-md border bg-white p-0.5" title="Whose claim is this?">
+      {OWNERS.map((o) => (
+        <button
+          key={o.key}
+          onClick={() => onChange(o.key)}
+          className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+            value === o.key ? "bg-indigo-50 text-indigo-700" : "text-gray-500 hover:bg-gray-50"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function TaxSelect({
   value,
   onChange,
@@ -59,6 +82,7 @@ export default function ClaimsQueue({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [bulkCode, setBulkCode] = useState("");
+  const [bulkOwner, setBulkOwner] = useState("");
   const [busy, setBusy] = useState(false);
   const [lastTagged, setLastTagged] = useState<string[] | null>(null);
   const [, startTransition] = useTransition();
@@ -122,6 +146,20 @@ export default function ClaimsQueue({
     setLastTagged([id]);
     refresh();
   }
+  async function applyOwner() {
+    if (!selected.size || !bulkOwner) return;
+    setBusy(true);
+    const ids = [...selected];
+    await post({ ids, owner: bulkOwner });
+    setLastTagged(ids);
+    setBulkOwner("");
+    refresh();
+  }
+  async function setRowOwner(id: string, owner: string) {
+    setBusy(true);
+    await post({ id, owner });
+    refresh();
+  }
   async function clearLast() {
     if (!lastTagged?.length) return;
     setBusy(true);
@@ -173,6 +211,23 @@ export default function ClaimsQueue({
         </button>
         <button className="btn-ghost" onClick={markNotDeductible} disabled={!selected.size || busy}>
           <Ban size={15} /> Not deductible
+        </button>
+        <div className="mx-1 h-5 w-px bg-gray-200" />
+        <select
+          className="select text-sm"
+          value={bulkOwner}
+          onChange={(e) => setBulkOwner(e.target.value)}
+          title="Assign these claims to a person"
+        >
+          <option value="">Owner…</option>
+          {OWNERS.map((o) => (
+            <option key={o.key} value={o.key}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <button className="btn-ghost" onClick={applyOwner} disabled={!selected.size || !bulkOwner || busy}>
+          <Check size={15} /> Assign owner
         </button>
         <span className="ml-auto text-xs text-gray-500">
           <span className="font-semibold text-emerald-600">{claimedCount}</span> marked deductible
@@ -235,10 +290,10 @@ export default function ClaimsQueue({
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium">{t.merchant || t.detail}</div>
                         <div className="truncate text-xs text-gray-400">
-                          {t.owner}
-                          {t.tax_category ? ` · ${taxLabel(t.tax_category)}` : ""}
+                          {t.tax_category ? taxLabel(t.tax_category) : "Untagged"}
                         </div>
                       </div>
+                      <OwnerToggle value={t.owner} onChange={(v) => setRowOwner(t.id, v)} />
                       <div className="w-24 shrink-0 text-right text-sm tabular font-medium">
                         {money(t.amount, { decimals: true, sign: true })}
                       </div>

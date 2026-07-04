@@ -1,14 +1,13 @@
 import Link from "next/link";
 import PeriodSelector from "@/components/PeriodSelector";
-import YoyMatrix from "@/components/YoyMatrix";
 import ClaimsHistory from "@/components/ClaimsHistory";
 import { PageHeader, StatCard, EmptyState } from "@/components/ui";
-import { getAvailablePeriods, fetchTypeTotals, fetchClaimTotals, fetchCategoryYoY, fetchClaimEstimates } from "@/lib/queries";
+import { getAvailablePeriods, fetchTypeTotals, fetchClaimTotals, fetchClaimEstimates, fetchTaggedClaims } from "@/lib/queries";
 import { parsePeriod, periodLabel, fyLabel, EXPENSE_TYPES } from "@/lib/fy";
 import { money, TYPE_COLORS } from "@/lib/format";
 import { taxLabel } from "@/lib/taxcats";
 import { CLAIMS_ESTIMATE_FY } from "@/lib/claimsHistory";
-import { Download, ListChecks } from "lucide-react";
+import { Download, ListChecks, Home } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -26,14 +25,15 @@ export default async function TaxPage({
       : searchParams;
   const period = parsePeriod(effective);
 
-  // Up to 5 most recent FYs for the year-over-year matrix.
-  const yoyFys = fys.slice(0, 5);
+  // FY26 tagged claims feed the "linked transactions" view in the history table
+  // (always FY26, independent of the selected period above).
+  const fy26Period = parsePeriod({ period: "fy", value: String(CLAIMS_ESTIMATE_FY) });
 
-  const [totals, claimTotals, yoy, estimates] = await Promise.all([
+  const [totals, claimTotals, estimates, taggedFy26] = await Promise.all([
     fetchTypeTotals(period),
     fetchClaimTotals(period),
-    fetchCategoryYoY(yoyFys),
     fetchClaimEstimates(CLAIMS_ESTIMATE_FY),
+    fetchTaggedClaims(fy26Period),
   ]);
 
   // Group manual estimate overrides by person + category for the history table.
@@ -78,6 +78,9 @@ export default async function TaxPage({
         actions={
           <div className="flex items-center gap-2">
             <PeriodSelector years={years} fys={fys} fallback={fys.length > 0 ? `fy:${fys[0]}` : undefined} />
+            <Link href="/tax/rental" className="btn-ghost">
+              <Home size={15} /> Rental schedule
+            </Link>
             <Link href={claimsHref} className="btn-primary">
               <ListChecks size={15} /> Build claims
             </Link>
@@ -150,11 +153,8 @@ export default async function TaxPage({
         )}
       </div>
 
-      {/* Year-over-year matrix */}
-      {yoy.length > 0 && <YoyMatrix rows={yoy} fys={yoyFys} />}
-
       {/* Historical claims (submitted vs assessed) */}
-      <ClaimsHistory estimateFy={CLAIMS_ESTIMATE_FY} initialOverrides={estimateOverrides} />
+      <ClaimsHistory estimateFy={CLAIMS_ESTIMATE_FY} initialOverrides={estimateOverrides} taggedClaims={taggedFy26} />
 
       <p className="text-xs text-gray-400">
         {period.kind === "fy" ? `${fyLabel(period.value!)} runs 1 Jul ${period.value! - 1} → 30 Jun ${period.value}. ` : ""}

@@ -5,10 +5,13 @@ import { TAX_CATEGORY_BY_CODE } from "@/lib/taxcats";
 // Tax-claim tagging endpoint (service-role, server-only). Separate from the
 // v1 review endpoint: this only touches the tax layer (deductible / tax_category
 // / tax_note), never the budget `status` or `category`. See SOLUTION_DESIGN_TAX.md §4.
-//   - Tag one:   { id, deductible?, tax_category?, tax_note? }
-//   - Bulk tag:  { ids: string[], deductible?, tax_category?, tax_note? }
+//   - Tag one:   { id, deductible?, tax_category?, tax_note?, owner? }
+//   - Bulk tag:  { ids: string[], deductible?, tax_category?, tax_note?, owner? }
 // Setting a deductible tax_category implies deductible=true unless explicitly
-// overridden; picking `not_deductible` implies deductible=false.
+// overridden; picking `not_deductible` implies deductible=false. `owner`
+// reassigns which person the claim belongs to ('lloyd' | 'milani').
+const OWNERS = new Set(["lloyd", "milani"]);
+
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
     id?: string;
@@ -16,10 +19,18 @@ export async function POST(req: NextRequest) {
     deductible?: boolean | null;
     tax_category?: string | null;
     tax_note?: string | null;
+    owner?: string | null;
   };
   const supabase = createServiceClient();
 
   const update: Record<string, unknown> = {};
+
+  if (body.owner !== undefined) {
+    if (body.owner && !OWNERS.has(body.owner)) {
+      return NextResponse.json({ error: `unknown owner: ${body.owner}` }, { status: 400 });
+    }
+    update.owner = body.owner || null;
+  }
 
   if (body.tax_category !== undefined) {
     if (body.tax_category && !TAX_CATEGORY_BY_CODE[body.tax_category]) {
