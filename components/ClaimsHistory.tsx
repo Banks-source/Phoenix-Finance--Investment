@@ -13,7 +13,7 @@ import {
 } from "@/lib/claimsHistory";
 import { money } from "@/lib/format";
 import { fyLabel } from "@/lib/fy";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 
 const PEOPLE: { key: ClaimPerson; label: string }[] = [
   { key: "lloyd", label: "Lloyd" },
@@ -36,6 +36,14 @@ export default function ClaimsHistory({
     initialOverrides ?? { lloyd: {}, milani: {} }
   );
   const [saving, setSaving] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (cat: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
+      return next;
+    });
 
   const fys = claimsHistoryFys();
   const history = CLAIMS_HISTORY.find((p) => p.person === person)!;
@@ -227,6 +235,7 @@ export default function ClaimsHistory({
               const ov = overrides[person]?.[cat];
               const suggestion = computed[cat as keyof typeof computed];
               const subRows = breakdownRows(cat);
+              const isOpen = expanded.has(cat);
               return (
                 <Fragment key={cat}>
                   <tr className="hover:bg-gray-50/60">
@@ -234,7 +243,21 @@ export default function ClaimsHistory({
                       <span className="mr-2 inline-block w-14 shrink-0 rounded bg-gray-100 px-1 py-0.5 text-center font-mono text-[10px] font-medium text-gray-500">
                         {CLAIM_CATEGORY_DITEM[cat]}
                       </span>
-                      {cat}
+                      {subRows.length > 0 ? (
+                        <button
+                          onClick={() => toggleExpanded(cat)}
+                          className="inline-flex items-center gap-1 rounded hover:text-indigo-700"
+                          title={isOpen ? "Hide breakdown" : "Show breakdown"}
+                        >
+                          <ChevronRight
+                            size={13}
+                            className={`shrink-0 text-gray-400 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                          />
+                          {cat}
+                        </button>
+                      ) : (
+                        cat
+                      )}
                     </td>
                     {fys.map((fy) => {
                       const v = cell(fy, cat);
@@ -259,20 +282,21 @@ export default function ClaimsHistory({
                       />
                     </td>
                   </tr>
-                  {subRows.map((br) => (
-                    <tr key={`${cat}-${br.label}`} className="text-xs text-gray-500">
-                      <td className="py-1 pl-[4.75rem] pr-4">{br.label}</td>
-                      {fys.map((fy) => {
-                        const v = br.byFy.get(fy);
-                        return (
-                          <td key={fy} className="px-4 py-1 text-right tabular">
-                            {v != null ? money(v) : <span className="text-gray-300">—</span>}
-                          </td>
-                        );
-                      })}
-                      <td className="px-4 py-1 text-right text-gray-300">—</td>
-                    </tr>
-                  ))}
+                  {isOpen &&
+                    subRows.map((br) => (
+                      <tr key={`${cat}-${br.label}`} className="text-xs text-gray-500">
+                        <td className="py-1 pl-[5.5rem] pr-4">{br.label}</td>
+                        {fys.map((fy) => {
+                          const v = br.byFy.get(fy);
+                          return (
+                            <td key={fy} className="px-4 py-1 text-right tabular">
+                              {v != null ? money(v) : <span className="text-gray-300">—</span>}
+                            </td>
+                          );
+                        })}
+                        <td className="px-4 py-1 text-right text-gray-300">—</td>
+                      </tr>
+                    ))}
                 </Fragment>
               );
             })}

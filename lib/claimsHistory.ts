@@ -94,6 +94,28 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
           Education: 200,
           "Managing tax affairs": 3073.42,
         },
+        breakdown: {
+          "Subscriptions & software": [
+            { label: "Office 365", amount: 156 },
+            { label: "YouTube Learn", amount: 179.88 },
+            { label: "Evernote", amount: 119.88 },
+            { label: "iCloud", amount: 53.88 },
+            { label: "Dropbox", amount: 168 },
+            { label: "ExpressVPN", amount: 40 },
+            { label: "LinkedIn", amount: 120 },
+          ],
+          "Home office & tech": [
+            { label: "Work desk", amount: 299 },
+            { label: "Laptop camera", amount: 199 },
+            { label: "Laptop lease", amount: 1040 },
+            { label: "iPad", amount: 700 },
+          ],
+          "Car & transport": [
+            { label: "Parking", amount: 98 },
+            { label: "Taxi & rideshare", amount: 59 },
+            { label: "Road tolls", amount: 60 },
+          ],
+        },
         submittedTotal: 9207.26,
         carKm: 900,
         source: "personal/lloyd/2021/p4_lloyd_personal_2021.xlsx",
@@ -111,6 +133,34 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
           "Managing tax affairs": 4946,
           Other: 2035, // SMSF setup $1,540 + property advice $495
         },
+        breakdown: {
+          "Subscriptions & software": [
+            { label: "Office 365", amount: 156 },
+            { label: "Trading View", amount: 89 },
+            { label: "Dropbox", amount: 224 },
+            { label: "Apple (YouTube Learn, Evernote, iCloud)", amount: 515 },
+            { label: "Web hosting & registration", amount: 179 },
+          ],
+          "Home office & tech": [
+            { label: "Laptop lease", amount: 1695 },
+            { label: "Phone (hardware)", amount: 1649 },
+            { label: "Phone repairs", amount: 1020 },
+            { label: "Wireless headphones", amount: 263 },
+          ],
+          "Car & transport": [
+            { label: "Parking", amount: 157 },
+            { label: "Taxi & rideshare", amount: 84 },
+            { label: "Road tolls", amount: 50 },
+          ],
+          "Managing tax affairs": [
+            { label: "Accountant fees", amount: 3421 },
+            { label: "IIG tax", amount: 1525 },
+          ],
+          Other: [
+            { label: "SMSF setup", amount: 1540 },
+            { label: "Property advice", amount: 495 },
+          ],
+        },
         submittedTotal: 18332.5,
         grossWages: 183446.51,
         paygWithheld: 56680,
@@ -125,6 +175,44 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
           "Car & transport": 446,
           Donations: 166.5,
           "Managing tax affairs": 3520, // accountant $3,421 + Koinly $99
+        },
+        breakdown: {
+          "Subscriptions & software": [
+            { label: "ExpressVPN", amount: 188.81 },
+            { label: "Kindle", amount: 56.95 },
+            { label: "Adobe Systems", amount: 28.99 },
+            { label: "Audible", amount: 148.05 },
+            { label: "Dropbox", amount: 86.82 },
+            { label: "G Suite", amount: 147.84 },
+            { label: "Microsoft", amount: 70 },
+            { label: "YouTube", amount: 2.99 },
+            { label: "Brain FM", amount: 43.66 },
+            { label: "ChatGPT", amount: 61.04 },
+            { label: "Cloud", amount: 521.52 },
+            { label: "Kubera", amount: 268.8 },
+            { label: "Real Vision", amount: 2624.72 },
+            { label: "Trading View", amount: 197 },
+          ],
+          "Home office & tech": [
+            { label: "Webcentral (web hosting)", amount: 166.2 },
+            { label: "Ink Station", amount: 91.54 },
+            { label: "Officeworks (mouse)", amount: 190.98 },
+            { label: "New monitor", amount: 1096.11 },
+          ],
+          "Car & transport": [
+            { label: "Parking", amount: 235 },
+            { label: "Taxi & rideshare", amount: 36 },
+            { label: "Road tolls", amount: 175 },
+          ],
+          Donations: [
+            { label: "Beyond Blue", amount: 52.5 },
+            { label: "Cancer Council (Victoria)", amount: 104 },
+            { label: "Peter MacCallum Cancer Foundation", amount: 10 },
+          ],
+          "Managing tax affairs": [
+            { label: "Accountant fees", amount: 3421 },
+            { label: "Koinly crypto report", amount: 99 },
+          ],
         },
         submittedTotal: 12238.35,
         wfhHours: 1890,
@@ -142,6 +230,34 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
           Education: 3033.06, // Real Vision
           "Managing tax affairs": 3848.3, // Joe fees $3,751 + Koinly $97.30
           Other: 69.95, // Equifax
+        },
+        breakdown: {
+          "Phone & internet": [
+            { label: "Mobile & internet", amount: 1930.56 },
+            { label: "Website", amount: 127.4 },
+          ],
+          "Subscriptions & software": [
+            { label: "Apple", amount: 464.63 },
+            { label: "Audible", amount: 98.7 },
+            { label: "BrainFM", amount: 74.87 },
+            { label: "ExpressVPN", amount: 215.78 },
+            { label: "Google Australia", amount: 216.33 },
+            { label: "G Suite", amount: 312.56 },
+            { label: "Kindle", amount: 153.89 },
+            { label: "Kubera", amount: 276.43 },
+            { label: "OpenAI", amount: 305.64 },
+            { label: "Trading View", amount: 456.53 },
+          ],
+          "Car & transport": [
+            { label: "Parking", amount: 332.59 },
+            { label: "Taxi & rideshare", amount: 192.1 },
+            { label: "Road tolls", amount: 37.72 },
+          ],
+          "Managing tax affairs": [
+            { label: "Accountant fees (Joe)", amount: 3751 },
+            { label: "Koinly crypto report", amount: 97.3 },
+          ],
+          Other: [{ label: "Equifax", amount: 69.95 }],
         },
         submittedTotal: 12147.04,
         wfhHours: 1890,
@@ -164,14 +280,12 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
         },
         breakdown: {
           "Car & transport": [
-            { label: "D1 · car (Honda Civic, 2,500km logbook)", amount: 2200 },
-            { label: "D2 · taxi", amount: 189 },
-            { label: "D2 · parking", amount: 280 },
-            { label: "D2 · road tolls", amount: 149 },
-            { label: "D2 · car hire", amount: 394 },
+            { label: "Car (Honda Civic, 2,500km logbook)", amount: 2200 },
+            { label: "Parking", amount: 280 },
+            { label: "Taxi & rideshare", amount: 189 },
+            { label: "Road tolls", amount: 149 },
+            { label: "Car hire", amount: 394 },
           ],
-          "Home office & tech": [{ label: "D5 · tools & equipment", amount: 505 }],
-          "Managing tax affairs": [{ label: "D10 · other expenses (managing tax affairs)", amount: 4400 }],
         },
         submittedTotal: 11386, // lodged return D1 $2,200 + D2 $1,012 + D5 $3,774 + D10 $4,400
         carKm: 2500,
@@ -201,6 +315,12 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
           "Work from home": 921.6,
           "Managing tax affairs": 110,
         },
+        breakdown: {
+          "Car & transport": [
+            { label: "Parking", amount: 40 },
+            { label: "Taxi & rideshare", amount: 48 },
+          ],
+        },
         submittedTotal: 2080.8,
         flags: ["Workbook's printed total ($1,159) excludes the $922 work-from-home line shown here."],
         source: "personal/milani/2021/p4_milani_taxes_2021.xlsx",
@@ -212,6 +332,12 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
           "Car & transport": 78, // taxi $48 + parking $30
           "Work from home": 896,
           "Managing tax affairs": 110,
+        },
+        breakdown: {
+          "Car & transport": [
+            { label: "Parking", amount: 30 },
+            { label: "Taxi & rideshare", amount: 48 },
+          ],
         },
         submittedTotal: 1704.6,
         grossWages: 40733,
@@ -225,6 +351,12 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
           "Phone & internet": 884.4, // Telstra
           "Car & transport": 225, // parking $135 + taxi/uber $90
           "Managing tax affairs": 110,
+        },
+        breakdown: {
+          "Car & transport": [
+            { label: "Parking", amount: 135 },
+            { label: "Taxi & rideshare", amount: 90 },
+          ],
         },
         submittedTotal: 1219.4,
         wfhHours: 1440,
@@ -246,6 +378,12 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
           "Phone & internet": 1100, // Telstra
           "Car & transport": 179, // parking $89 + taxi/uber $90
           "Managing tax affairs": 110,
+        },
+        breakdown: {
+          "Car & transport": [
+            { label: "Parking", amount: 89 },
+            { label: "Taxi & rideshare", amount: 90 },
+          ],
         },
         submittedTotal: 1389,
         wfhHours: 1440,
