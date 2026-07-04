@@ -16,7 +16,7 @@ import { fyLabel } from "@/lib/fy";
 import { taxLabel, claimCategoryForCode, claimSubcategoryForCode } from "@/lib/taxcats";
 import { RENTAL_HISTORY, rentalNetForFy, rentalLossForFy } from "@/lib/rentalHistory";
 import type { TaggedClaim } from "@/lib/queries";
-import { AlertTriangle, ChevronRight, Link2 } from "lucide-react";
+import { AlertTriangle, ChevronRight, Link2, Plus, X } from "lucide-react";
 
 const PEOPLE: { key: ClaimPerson; label: string }[] = [
   { key: "lloyd", label: "Lloyd" },
@@ -27,7 +27,18 @@ type Overrides = Record<ClaimPerson, Partial<Record<string, number>>>;
 type Basis = "lodged" | "submitted";
 
 const RENTAL_CAT = "Rental loss (negative gearing)";
+const CAR_CAT = "Car & transport";
 const WFH_RATE = 0.7; // ATO fixed-rate WFH method (70c/hour), FY2024-25 & FY2025-26
+
+// Manually-added sub-lines and the car km value are stored in claim_estimates
+// under a composite category key `<parent> :: <label>`, so they persist through
+// the same endpoint with no schema change. The km value is stored as a km count.
+const LINE_SEP = " :: ";
+const KM_SENTINEL = "__km";
+const KM_KEY = `${CAR_CAT}${LINE_SEP}${KM_SENTINEL}`;
+const CAR_KM_RATE = 0.88; // ATO cents-per-km method, FY2025-26 (88c/km)
+const CAR_KM_CAP = 5000; // km cap under the cents-per-km method
+const carKmDollarsFor = (km: number) => Math.round(Math.min(km, CAR_KM_CAP) * CAR_KM_RATE);
 
 export default function ClaimsHistory({
   estimateFy,
@@ -46,6 +57,13 @@ export default function ClaimsHistory({
   );
   const [saving, setSaving] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Draft for the "add line" row of each category.
+  const [draft, setDraft] = useState<Record<string, { label: string; amount: string }>>({});
+  const setDraftFor = (cat: string, patch: Partial<{ label: string; amount: string }>) =>
+    setDraft((d) => {
+      const cur = d[cat] ?? { label: "", amount: "" };
+      return { ...d, [cat]: { ...cur, ...patch } };
+    });
 
   const toggleExpanded = (cat: string) =>
     setExpanded((prev) => {
@@ -130,8 +148,30 @@ export default function ClaimsHistory({
   // other category sums its tagged FY26 transactions. A manual override wins.
   const autoFor = (cat: string): number | undefined =>
     cat === RENTAL_CAT ? rentalAuto : taggedByCat[cat];
-  const effEstimate = (cat: string) =>
-    overrides[person]?.[cat] ?? autoFor(cat) ?? computed[cat as keyof typeof computed] ?? 0;
+
+  // Manually-added sub-lines under a category (excludes the km sentinel).
+  const manualLines = (cat: string): { key: string; label: string; amount: number }[] => {
+    const o = overrides[person] ?? {};
+    return Object.keys(o)
+      .filter((k) => k.startsWith(cat + LINE_SEP) && !k.endsWith(LINE_SEP + KM_SENTINEL))
+      .map((k) => ({ key: k, label: k.slice(cat.length + LINE_SEP.length), amount: o[k] as number }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  };
+  const manualSum = (cat: string) => manualLines(cat).reduce((s, l) => s + l.amount, 0);
+
+  // Car cents-per-km method: stored km count -> dollars (capped).
+  const carKm = overrides[person]?.[KM_KEY];
+  const carKmDollars = carKm != null ? carKmDollarsFor(carKm) : 0;
+
+  // A category is "itemised" once the user adds lines (or, for Car, km) — then the
+  // estimate is the sum of those detail lines rather than a single typed number.
+  const isItemised = (cat: string) => manualLines(cat).length > 0 || (cat === CAR_CAT && carKm != null);
+
+  const effEstimate = (cat: string) => {
+    const detail = manualSum(cat) + (cat === CAR_CAT ? carKmDollars : 0);
+    if (isItemised(cat)) return (autoFor(cat) ?? 0) + detail;
+    return overrides[person]?.[cat] ?? autoFor(cat) ?? computed[cat as keyof typeof computed] ?? 0;
+  };
   const estimateTotal = CLAIM_CATEGORY_ORDER.reduce((s, cat) => s + effEstimate(cat), 0);
 
   // WFH: the hours row (bottom) drives the "Work from home" dollar estimate at the
@@ -267,6 +307,21 @@ export default function ClaimsHistory({
     await saveEstimate("Work from home", String(Math.round(hours * WFH_RATE)));
   }
 
+  // Add a manual sub-line under a category (persists to claim_estimates).
+  async function addLine(cat: string) {
+    const d = draft[cat];
+    const label = d?.label.trim();
+    if (!label) return;
+    const amount = d?.amount.trim() === "" ? "0" : d!.amount.trim();
+    await saveEstimate(`${cat}${LINE_SEP}${label}`, amount);
+    setDraft((prev) => ({ ...prev, [cat]: { label: "", amount: "" } }));
+  }
+
+  // Car cents-per-km: store the km count (empty clears it).
+  async function saveCarKm(raw: string) {
+    await saveEstimate(KM_KEY, raw);
+  }
+
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b bg-gray-50 px-4 py-2.5">
@@ -274,9 +329,10 @@ export default function ClaimsHistory({
           <h2 className="text-sm font-semibold">Personal return · deductions & end-to-end refund</h2>
           <p className="text-[11px] text-gray-500">
             Deductions by category, then the full return to the refund. Toggle <b>As lodged</b> (assessed) vs{" "}
-            <b>Submitted</b> (workbook). {fyLabel(estimateFy)} is an editable estimate \u2014{" "}
-            <span className="text-emerald-700">green</span> cells are auto-summed from tagged transactions,{" "}
-            <span className="text-indigo-700">indigo</span> are manual overrides.
+            <b>Submitted</b> (workbook). {fyLabel(estimateFy)} is an editable estimate —{" "}
+            <span className="text-emerald-700">green</span> cells are auto-summed from tagged transactions or itemised
+            lines, <span className="text-indigo-700">indigo</span> are manual overrides. Expand a row to add your own
+            lines.
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -350,6 +406,8 @@ export default function ClaimsHistory({
               const autoValue = tagged != null ? Math.round(tagged) : undefined;
               const subRows = breakdownRows(cat);
               const isOpen = expanded.has(cat);
+              const mlines = manualLines(cat);
+              const itemised = isItemised(cat);
               return (
                 <Fragment key={cat}>
                   <tr className="hover:bg-gray-50/60">
@@ -357,21 +415,17 @@ export default function ClaimsHistory({
                       <span className="mr-2 inline-block w-14 shrink-0 rounded bg-gray-100 px-1 py-0.5 text-center font-mono text-[10px] font-medium text-gray-500">
                         {CLAIM_CATEGORY_DITEM[cat]}
                       </span>
-                      {subRows.length > 0 ? (
-                        <button
-                          onClick={() => toggleExpanded(cat)}
-                          className="inline-flex items-center gap-1 rounded hover:text-indigo-700"
-                          title={isOpen ? "Hide breakdown" : "Show breakdown"}
-                        >
-                          <ChevronRight
-                            size={13}
-                            className={`shrink-0 text-gray-400 transition-transform ${isOpen ? "rotate-90" : ""}`}
-                          />
-                          {cat}
-                        </button>
-                      ) : (
-                        cat
-                      )}
+                      <button
+                        onClick={() => toggleExpanded(cat)}
+                        className="inline-flex items-center gap-1 rounded hover:text-indigo-700"
+                        title={isOpen ? "Hide breakdown" : "Show / add lines"}
+                      >
+                        <ChevronRight
+                          size={13}
+                          className={`shrink-0 text-gray-400 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                        />
+                        {cat}
+                      </button>
                     </td>
                     {fys.map((fy) => {
                       const v = cell(fy, cat);
@@ -382,50 +436,164 @@ export default function ClaimsHistory({
                       );
                     })}
                     <td className="px-2 py-1.5 text-right">
-                      <input
-                        key={`${person}-${cat}-${ov ?? ""}-${autoValue ?? ""}`}
-                        type="number"
-                        min={0}
-                        inputMode="decimal"
-                        defaultValue={ov ?? autoValue ?? ""}
-                        placeholder={suggestion ? String(suggestion) : "0"}
-                        onBlur={(e) => saveEstimate(cat, e.target.value)}
-                        title={
-                          ov != null
-                            ? "Manual override — type to change"
-                            : tagged != null
-                            ? cat === RENTAL_CAT
-                              ? `Auto from the rental schedule (${money(tagged)} net loss) — type to override`
-                              : `Auto from ${money(tagged)} of tagged FY26 transactions — type to override`
-                            : "Estimate — type to override"
-                        }
-                        className={`w-24 rounded-md border px-2 py-1 text-right tabular focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300 ${
-                          ov != null
-                            ? "border-indigo-300 bg-indigo-50/40 font-medium text-indigo-800"
-                            : tagged != null
-                            ? "border-emerald-200 bg-emerald-50/30 font-medium text-emerald-800"
-                            : "border-gray-200"
-                        } ${saving === cat ? "opacity-60" : ""}`}
-                      />
+                      {itemised ? (
+                        <button
+                          onClick={() => toggleExpanded(cat)}
+                          title="Itemised from the lines below — expand to edit"
+                          className="w-24 rounded-md border border-emerald-200 bg-emerald-50/30 px-2 py-1 text-right tabular font-medium text-emerald-800 hover:bg-emerald-50"
+                        >
+                          {money(effEstimate(cat))}
+                        </button>
+                      ) : (
+                        <input
+                          key={`${person}-${cat}-${ov ?? ""}-${autoValue ?? ""}`}
+                          type="number"
+                          min={0}
+                          inputMode="decimal"
+                          defaultValue={ov ?? autoValue ?? ""}
+                          placeholder={suggestion ? String(suggestion) : "0"}
+                          onBlur={(e) => saveEstimate(cat, e.target.value)}
+                          title={
+                            ov != null
+                              ? "Manual override — type to change"
+                              : tagged != null
+                              ? cat === RENTAL_CAT
+                                ? `Auto from the rental schedule (${money(tagged)} net loss) — type to override`
+                                : `Auto from ${money(tagged)} of tagged FY26 transactions — type to override`
+                              : "Estimate — type to override"
+                          }
+                          className={`w-24 rounded-md border px-2 py-1 text-right tabular focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300 ${
+                            ov != null
+                              ? "border-indigo-300 bg-indigo-50/40 font-medium text-indigo-800"
+                              : tagged != null
+                              ? "border-emerald-200 bg-emerald-50/30 font-medium text-emerald-800"
+                              : "border-gray-200"
+                          } ${saving === cat ? "opacity-60" : ""}`}
+                        />
+                      )}
                     </td>
                   </tr>
-                  {isOpen &&
-                    subRows.map((br) => (
-                      <tr key={`${cat}-${br.label}`} className="text-xs text-gray-500">
-                        <td className="py-1 pl-[5.5rem] pr-4">{br.label}</td>
-                        {fys.map((fy) => {
-                          const v = br.byFy.get(fy);
-                          return (
-                            <td key={fy} className="px-4 py-1 text-right tabular">
-                              {v != null ? money(v) : <span className="text-gray-300">—</span>}
+                  {isOpen && (
+                    <>
+                      {subRows.map((br) => (
+                        <tr key={`${cat}-${br.label}`} className="text-xs text-gray-500">
+                          <td className="py-1 pl-[5.5rem] pr-4">{br.label}</td>
+                          {fys.map((fy) => {
+                            const v = br.byFy.get(fy);
+                            return (
+                              <td key={fy} className="px-4 py-1 text-right tabular">
+                                {v != null ? money(v) : <span className="text-gray-300">—</span>}
+                              </td>
+                            );
+                          })}
+                          <td className="px-4 py-1 text-right tabular text-gray-500">
+                            {br.fy26 != null ? money(br.fy26) : <span className="text-gray-300">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Manually-added lines (editable, saved to the DB) */}
+                      {mlines.map((l) => (
+                        <tr key={l.key} className="bg-indigo-50/20 text-xs text-gray-600">
+                          <td className="py-1 pl-[5.5rem] pr-4">
+                            <span className="inline-flex items-center gap-1.5">
+                              <button
+                                onClick={() => saveEstimate(l.key, "")}
+                                title="Remove this line"
+                                className="text-gray-300 hover:text-rose-500"
+                              >
+                                <X size={12} />
+                              </button>
+                              {l.label}
+                            </span>
+                          </td>
+                          {fys.map((fy) => (
+                            <td key={fy} className="px-4 py-1 text-right text-gray-300">
+                              —
                             </td>
-                          );
-                        })}
-                        <td className="px-4 py-1 text-right tabular text-gray-500">
-                          {br.fy26 != null ? money(br.fy26) : <span className="text-gray-300">—</span>}
+                          ))}
+                          <td className="px-2 py-1 text-right">
+                            <input
+                              key={`${l.key}-${l.amount}`}
+                              type="number"
+                              min={0}
+                              inputMode="decimal"
+                              defaultValue={l.amount}
+                              onBlur={(e) => saveEstimate(l.key, e.target.value)}
+                              className={`w-24 rounded-md border border-indigo-200 bg-white px-2 py-1 text-right tabular focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300 ${
+                                saving === l.key ? "opacity-60" : ""
+                              }`}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Car cents-per-km calculator */}
+                      {cat === CAR_CAT && (
+                        <tr className="bg-indigo-50/20 text-xs text-gray-600">
+                          <td className="py-1 pl-[5.5rem] pr-4">
+                            Logbook km × {CAR_KM_RATE * 100}c (max {CAR_KM_CAP.toLocaleString()})
+                          </td>
+                          {fys.map((fy) => (
+                            <td key={fy} className="px-4 py-1 text-right text-gray-300">
+                              —
+                            </td>
+                          ))}
+                          <td className="px-2 py-1 text-right">
+                            <span className="inline-flex items-center justify-end gap-1.5">
+                              <input
+                                key={`km-${person}-${carKm ?? ""}`}
+                                type="number"
+                                min={0}
+                                inputMode="decimal"
+                                defaultValue={carKm ?? ""}
+                                placeholder="km"
+                                onBlur={(e) => saveCarKm(e.target.value)}
+                                title="Enter FY26 logbook km — dollar value fills the Car & transport estimate"
+                                className="w-16 rounded-md border border-indigo-200 bg-white px-2 py-1 text-right tabular focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                              />
+                              <span className="w-16 tabular font-medium text-emerald-700">
+                                {carKm != null ? money(carKmDollars) : ""}
+                              </span>
+                            </span>
+                          </td>
+                        </tr>
+                      )}
+                      {/* Add a manual line to this category */}
+                      <tr className="bg-gray-50/40 text-xs">
+                        <td className="py-1.5 pl-[5.5rem] pr-4">
+                          <input
+                            value={draft[cat]?.label ?? ""}
+                            onChange={(e) => setDraftFor(cat, { label: e.target.value })}
+                            onKeyDown={(e) => e.key === "Enter" && addLine(cat)}
+                            placeholder="+ Add item…"
+                            className="w-44 rounded-md border border-gray-200 px-2 py-1 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                          />
+                        </td>
+                        <td colSpan={fys.length} />
+                        <td className="px-2 py-1.5 text-right">
+                          <span className="inline-flex items-center justify-end gap-1.5">
+                            <input
+                              type="number"
+                              min={0}
+                              inputMode="decimal"
+                              value={draft[cat]?.amount ?? ""}
+                              onChange={(e) => setDraftFor(cat, { amount: e.target.value })}
+                              onKeyDown={(e) => e.key === "Enter" && addLine(cat)}
+                              placeholder="$"
+                              className="w-20 rounded-md border border-gray-200 px-2 py-1 text-right tabular focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                            />
+                            <button
+                              onClick={() => addLine(cat)}
+                              disabled={!draft[cat]?.label.trim()}
+                              title="Add line"
+                              className="rounded-md bg-indigo-600 p-1 text-white hover:bg-indigo-700 disabled:opacity-30"
+                            >
+                              <Plus size={13} />
+                            </button>
+                          </span>
                         </td>
                       </tr>
-                    ))}
+                    </>
+                  )}
                 </Fragment>
               );
             })}
