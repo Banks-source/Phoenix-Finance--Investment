@@ -359,9 +359,9 @@ export default function ClaimsHistory({
 
       <p className="border-t px-4 py-2 text-[11px] text-gray-400">
         The category rows are what was <b>submitted</b> to the agent (personal workbooks). The end-to-end return breaks
-        income into <b>salary &amp; wages</b>, <b>net rent</b> (a loss shows in red — Lloyd FY24-25 is the Ocean Grove
-        result &minus;$71,451 from OG.xlsx) and <b>other income</b>. On the <b>As lodged</b> basis the other-income line
-        is the residual needed to reconcile the documented wages and rental loss to the ATO-assessed taxable income
+        income into <b>salary &amp; wages</b>, <b>net rent</b> (a loss shows in red — Lloyd FY24-25 lodged a supplementary
+        loss of &minus;$58,317; the Ocean Grove P&amp;L in OG.xlsx is &minus;$71,451) and <b>other income</b>. On the{" "}
+        <b>As lodged</b> basis the other-income line is the residual needed to reconcile the documented wages and rental loss to the ATO-assessed taxable income
         (likely interest/distributions not itemised here); <b>Submitted</b> re-runs the waterfall on the workbook
         deductions only, so the rental loss is excluded and the gap to the lodged refund is visible.{" "}
         {fyLabel(estimateFy)} carries the rental loss forward as an editable estimate and taxes salary less deductions on

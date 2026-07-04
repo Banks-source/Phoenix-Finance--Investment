@@ -134,16 +134,15 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
       {
         fy: 2025,
         lines: {
-          "Phone & internet": 1470, // mobile/internet $1,400 + domain $70
-          "Subscriptions & software": 2304,
-          "Car & transport": 1012, // parking $280 + car hire $394 + tolls $149 + taxi $189
-          "Managing tax affairs": 3751, // Joe fees
-          Other: 952, // ASIC fees
+          "Phone & internet": 1400, // D5 · phone and internet
+          "Subscriptions & software": 1869, // D5 · subscriptions
+          "Home office & tech": 505, // D5 · tools & equipment
+          "Car & transport": 3212, // D1 car (Honda Civic, 2,500km logbook) $2,200 + D2 travel $1,012 (taxi/parking/tolls/car hire)
+          "Managing tax affairs": 4400, // D10 · cost of managing tax affairs
         },
-        submittedTotal: 9489,
-        wfhHours: 1890,
+        submittedTotal: 11386, // lodged return D1 $2,200 + D2 $1,012 + D5 $3,774 + D10 $4,400
         carKm: 2500,
-        netRental: -71451.05, // Ocean Grove FY2025 P&L (OG.xlsx): rent $33,142 vs interest −$98,083 etc.
+        netRental: -58317, // as lodged: supplementary-section net LOSS (return item L). Ocean Grove P&L (OG.xlsx) shows −$71,451.
         grossWages: 222418.2,
         paygWithheld: 73084,
         taxableIncome: 158335,
@@ -151,9 +150,9 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
         assessedMedicare: 3166.7,
         refund: 30013.35,
         flags: [
-          "Assessed taxable income $158,335 sits well below gross wages $222,418 — the driver is the Ocean Grove rental loss (−$71,451), not these ~$9.5k work deductions. Confirm the loss belongs on Lloyd's personal return (Ocean Grove / Inalaa Pty Ltd ownership is unresolved).",
+          "FY2025 lodged return: Total income or loss $169,721 − deductions $11,386 (D1 car $2,200, D2 travel $1,012, D5 other $3,774, D10 tax affairs $4,400) = taxable $158,335. The supplementary loss lodged is −$58,317, whereas the Ocean Grove P&L (OG.xlsx) shows −$71,451 — confirm the ~$13k difference (other supplementary income netted, or interest not fully claimed) and that the loss belongs on Lloyd's personal return (Inalaa Pty Ltd ownership unresolved).",
         ],
-        source: "personal/lloyd/2025/lloyd_personal_2025.xlsx",
+        source: "personal/lloyd/2025 lodged return (supplementary) + lloyd_personal_2025.xlsx",
       },
     ],
   },
