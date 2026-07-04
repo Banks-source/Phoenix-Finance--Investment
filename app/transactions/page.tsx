@@ -3,6 +3,7 @@ import TransactionsTable from "@/components/TransactionsTable";
 import { PageHeader, EmptyState } from "@/components/ui";
 import { getAvailablePeriods, fetchTransactions } from "@/lib/queries";
 import { parsePeriod, periodLabel } from "@/lib/fy";
+import { taxLabel } from "@/lib/taxcats";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ const PAGE_SIZE = 100;
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: { period?: string; value?: string; search?: string; category?: string; owner?: string; page?: string };
+  searchParams: { period?: string; value?: string; search?: string; category?: string; owner?: string; tax_category?: string; page?: string };
 }) {
   const page = Math.max(1, Number(searchParams.page ?? 1));
   const offset = (page - 1) * PAGE_SIZE;
@@ -31,6 +32,7 @@ export default async function TransactionsPage({
     status: "approved",
     search: searchParams.search,
     owner: searchParams.owner,
+    tax_category: searchParams.tax_category,
     limit: PAGE_SIZE,
     offset,
   });
@@ -47,6 +49,7 @@ export default async function TransactionsPage({
     if (searchParams.search) p.set("search", searchParams.search);
     if (searchParams.owner) p.set("owner", searchParams.owner);
     if (searchParams.category) p.set("category", searchParams.category);
+    if (searchParams.tax_category) p.set("tax_category", searchParams.tax_category);
     Object.entries(extra).forEach(([k, v]) => p.set(k, v));
     return p.toString();
   };
@@ -55,7 +58,7 @@ export default async function TransactionsPage({
     <div className="space-y-6">
       <PageHeader
         title="Transactions"
-        subtitle={`${count.toLocaleString()} approved · ${periodLabel(period)}${searchParams.category ? ` · ${searchParams.category}` : ""}`}
+        subtitle={`${count.toLocaleString()} approved · ${periodLabel(period)}${searchParams.category ? ` · ${searchParams.category}` : ""}${searchParams.tax_category ? ` · ${taxLabel(searchParams.tax_category)}` : ""}`}
         actions={<PeriodSelector years={years} fys={fys} fallback={fys.length > 0 ? `fy:${fys[0]}` : undefined} />}
       />
 
@@ -75,8 +78,8 @@ export default async function TransactionsPage({
           <option value="joint">Joint</option>
         </select>
         <button className="btn-primary" type="submit">Filter</button>
-        {(searchParams.search || searchParams.owner || searchParams.category) && (
-          <Link className="btn-ghost" href={`/transactions?${baseParams({}).replace(/(search|owner|category)=[^&]*&?/g, "")}`}>
+        {(searchParams.search || searchParams.owner || searchParams.category || searchParams.tax_category) && (
+          <Link className="btn-ghost" href={`/transactions?${baseParams({}).replace(/(search|owner|category|tax_category)=[^&]*&?/g, "")}`}>
             Clear
           </Link>
         )}

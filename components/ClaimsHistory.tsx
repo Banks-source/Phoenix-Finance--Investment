@@ -13,7 +13,8 @@ import {
 } from "@/lib/claimsHistory";
 import { money } from "@/lib/format";
 import { fyLabel } from "@/lib/fy";
-import { taxLabel, claimCategoryForCode } from "@/lib/taxcats";
+import { taxLabel, claimCategoryForCode, claimSubcategoryForCode } from "@/lib/taxcats";
+import { RENTAL_HISTORY, rentalNetForFy, rentalLossForFy } from "@/lib/rentalHistory";
 import type { TaggedClaim } from "@/lib/queries";
 import { AlertTriangle, ChevronRight, Link2 } from "lucide-react";
 
@@ -24,6 +25,9 @@ const PEOPLE: { key: ClaimPerson; label: string }[] = [
 
 type Overrides = Record<ClaimPerson, Partial<Record<string, number>>>;
 type Basis = "lodged" | "submitted";
+
+const RENTAL_CAT = "Rental loss (negative gearing)";
+const WFH_RATE = 0.7; // ATO fixed-rate WFH method (70c/hour), FY2024-25 & FY2025-26
 
 export default function ClaimsHistory({
   estimateFy,
@@ -57,15 +61,35 @@ export default function ClaimsHistory({
 
   const cell = (fy: number, cat: (typeof CLAIM_CATEGORY_ORDER)[number]) => byFy.get(fy)?.lines[cat] ?? 0;
 
-  // Sub-item breakdown for a category: the union of sub-line labels across all
-  // years (first-seen order), each with its per-FY amount where documented.
+  // Sub-item breakdown for a category. Rental loss breaks down by property (read
+  // from the rental schedule); other categories use the union of documented
+  // sub-line labels across years, each with its per-FY amount and an FY26 estimate.
   const breakdownRows = (cat: (typeof CLAIM_CATEGORY_ORDER)[number]) => {
+    if (cat === RENTAL_CAT) {
+      if (person !== "lloyd") return [] as { label: string; byFy: Map<number, number | undefined>; fy26?: number }[];
+      return RENTAL_HISTORY.map((p) => ({
+        label: p.label,
+        byFy: new Map(
+          fys.map((fy) => {
+            const n = rentalNetForFy(p.property, fy);
+            return [fy, n == null ? undefined : n < 0 ? -n : 0] as [number, number | undefined];
+          })
+        ),
+        fy26: rentalLosses.find((r) => r.property === p.property)?.loss,
+      }));
+    }
     const labels: string[] = [];
     for (const y of history.years)
       for (const b of y.breakdown?.[cat] ?? []) if (!labels.includes(b.label)) labels.push(b.label);
+    // Car & transport: also surface any tagged sub-line not seen historically.
+    if (cat === "Car & transport")
+      for (const label of Object.keys(taggedCarSub)) if (!labels.includes(label)) labels.push(label);
     return labels.map((label) => ({
       label,
-      byFy: new Map(history.years.map((y) => [y.fy, (y.breakdown?.[cat] ?? []).find((b) => b.label === label)?.amount])),
+      byFy: new Map<number, number | undefined>(
+        history.years.map((y) => [y.fy, (y.breakdown?.[cat] ?? []).find((b) => b.label === label)?.amount])
+      ),
+      fy26: cat === "Car & transport" ? taggedCarSub[label] : undefined,
     }));
   };
 
@@ -82,15 +106,41 @@ export default function ClaimsHistory({
     return m;
   }, [taggedClaims, person]);
 
-  // Effective FY-estimate for a category = manual override, else the FY26 tagged
-  // total, else the workbook-derived suggestion.
+  // FY26 car spend tagged to sub-lines (Parking / Taxi & rideshare / …), to fill
+  // the Car & transport breakdown's estimate column.
+  const taggedCarSub = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const t of taggedClaims) {
+      if (t.owner !== person) continue;
+      const sub = claimSubcategoryForCode(t.tax_category);
+      if (!sub) continue;
+      m[sub] = (m[sub] ?? 0) + t.amount;
+    }
+    return m;
+  }, [taggedClaims, person]);
+
+  // Rental loss estimate per property, read from the rental schedule (Lloyd only).
+  const rentalLosses = useMemo(
+    () => (person === "lloyd" ? rentalLossForFy(estimateFy) : []),
+    [person, estimateFy]
+  );
+  const rentalAuto = rentalLosses.reduce((s, r) => s + r.loss, 0) || undefined;
+
+  // Auto-seed for a category: rental loss reads from the rental schedule; every
+  // other category sums its tagged FY26 transactions. A manual override wins.
+  const autoFor = (cat: string): number | undefined =>
+    cat === RENTAL_CAT ? rentalAuto : taggedByCat[cat];
   const effEstimate = (cat: string) =>
-    overrides[person]?.[cat] ?? taggedByCat[cat] ?? computed[cat as keyof typeof computed] ?? 0;
+    overrides[person]?.[cat] ?? autoFor(cat) ?? computed[cat as keyof typeof computed] ?? 0;
   const estimateTotal = CLAIM_CATEGORY_ORDER.reduce((s, cat) => s + effEstimate(cat), 0);
+
+  // WFH: the hours row (bottom) drives the "Work from home" dollar estimate at the
+  // ATO fixed rate; the stored override is the dollar value, hours are derived.
+  const wfhOverride = overrides[person]?.["Work from home"];
+  const wfhHoursSeed = wfhOverride != null ? Math.round(wfhOverride / WFH_RATE) : undefined;
 
   // The rental loss is an income component (a negative net-rent line), not a
   // work-related deduction — split it out so it flows through the return.
-  const RENTAL_CAT = "Rental loss (negative gearing)";
   const rentalLossEst = effEstimate(RENTAL_CAT); // positive dollar loss
   const workDeductionsEst = CLAIM_CATEGORY_ORDER.filter((c) => c !== RENTAL_CAT).reduce(
     (s, cat) => s + effEstimate(cat),
@@ -207,6 +257,16 @@ export default function ClaimsHistory({
     }
   }
 
+  // Work-from-home hours -> dollar estimate at the ATO fixed rate. The stored
+  // override is the dollar value; an empty box clears it.
+  async function saveWfhHours(raw: string) {
+    const trimmed = raw.trim();
+    if (trimmed === "") return saveEstimate("Work from home", "");
+    const hours = Number(trimmed);
+    if (!Number.isFinite(hours) || hours < 0) return;
+    await saveEstimate("Work from home", String(Math.round(hours * WFH_RATE)));
+  }
+
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b bg-gray-50 px-4 py-2.5">
@@ -282,10 +342,11 @@ export default function ClaimsHistory({
           <tbody className="divide-y divide-gray-100">
             {CLAIM_CATEGORY_ORDER.map((cat) => {
               const ov = overrides[person]?.[cat];
-              const tagged = taggedByCat[cat];
+              // Auto-seed: rental loss from the rental schedule, else FY26 tagged total.
+              const tagged = autoFor(cat);
               const suggestion = computed[cat as keyof typeof computed];
               // Value shown in the est cell when there's no manual override: the
-              // FY26 tagged total (rounded), else blank (placeholder shows suggestion).
+              // auto-seed (rounded), else blank (placeholder shows suggestion).
               const autoValue = tagged != null ? Math.round(tagged) : undefined;
               const subRows = breakdownRows(cat);
               const isOpen = expanded.has(cat);
@@ -333,7 +394,9 @@ export default function ClaimsHistory({
                           ov != null
                             ? "Manual override — type to change"
                             : tagged != null
-                            ? `Auto from ${money(tagged)} of tagged FY26 transactions — type to override`
+                            ? cat === RENTAL_CAT
+                              ? `Auto from the rental schedule (${money(tagged)} net loss) — type to override`
+                              : `Auto from ${money(tagged)} of tagged FY26 transactions — type to override`
                             : "Estimate — type to override"
                         }
                         className={`w-24 rounded-md border px-2 py-1 text-right tabular focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300 ${
@@ -358,7 +421,9 @@ export default function ClaimsHistory({
                             </td>
                           );
                         })}
-                        <td className="px-4 py-1 text-right text-gray-300">—</td>
+                        <td className="px-4 py-1 text-right tabular text-gray-500">
+                          {br.fy26 != null ? money(br.fy26) : <span className="text-gray-300">—</span>}
+                        </td>
                       </tr>
                     ))}
                 </Fragment>
@@ -379,7 +444,7 @@ export default function ClaimsHistory({
             </tr>
             {/* Method-basis metrics */}
             <tr className="text-xs text-gray-500">
-              <td className="px-4 py-1.5">Work-from-home hours</td>
+              <td className="px-4 py-1.5">Work-from-home hours (× 70c)</td>
               {fys.map((fy) => {
                 const h = byFy.get(fy)?.wfhHours;
                 return (
@@ -388,7 +453,19 @@ export default function ClaimsHistory({
                   </td>
                 );
               })}
-              <td className="px-4 py-1.5 text-right text-gray-300">—</td>
+              <td className="px-2 py-1.5 text-right">
+                <input
+                  key={`wfh-${person}-${wfhOverride ?? ""}`}
+                  type="number"
+                  min={0}
+                  inputMode="decimal"
+                  defaultValue={wfhHoursSeed ?? ""}
+                  placeholder="hrs"
+                  onBlur={(e) => saveWfhHours(e.target.value)}
+                  title={`FY26 work-from-home hours × ${WFH_RATE * 100}c fills the Work from home estimate row`}
+                  className="w-16 rounded-md border border-gray-200 px-2 py-1 text-right tabular focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                />
+              </td>
             </tr>
             <tr className="text-xs text-gray-500">
               <td className="px-4 py-1.5">Car (logbook / km)</td>

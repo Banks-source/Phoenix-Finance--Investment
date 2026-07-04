@@ -5,8 +5,8 @@ import { PageHeader, StatCard, EmptyState } from "@/components/ui";
 import { getAvailablePeriods, fetchTypeTotals, fetchClaimTotals, fetchClaimEstimates, fetchTaggedClaims } from "@/lib/queries";
 import { parsePeriod, periodLabel, fyLabel, EXPENSE_TYPES } from "@/lib/fy";
 import { money, TYPE_COLORS } from "@/lib/format";
-import { taxLabel } from "@/lib/taxcats";
-import { CLAIMS_ESTIMATE_FY } from "@/lib/claimsHistory";
+import { taxLabel, claimCategoryForCode } from "@/lib/taxcats";
+import { CLAIMS_ESTIMATE_FY, CLAIM_CATEGORY_ORDER } from "@/lib/claimsHistory";
 import { Download, ListChecks, Home } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +62,25 @@ export default async function TaxPage({
     b.total += c.amount;
     claimsByBucket.set(c.tax_category, b);
   }
-  const bucketRows = [...claimsByBucket.entries()].sort((a, b) => b[1].total - a[1].total);
+  // Order the ATO buckets the same way as the history table (by normalised claim
+  // category), so the two tables read top-to-bottom identically; codes with no
+  // claim-category mapping fall to the end. Ties break on total desc.
+  const catRank = (code: string) => {
+    const cc = claimCategoryForCode(code);
+    const i = cc ? (CLAIM_CATEGORY_ORDER as readonly string[]).indexOf(cc) : -1;
+    return i === -1 ? 999 : i;
+  };
+  const bucketRows = [...claimsByBucket.entries()].sort((a, b) => {
+    const d = catRank(a[0]) - catRank(b[0]);
+    return d !== 0 ? d : b[1].total - a[1].total;
+  });
+
+  // Link a bucket to the transactions that make it up (same period, tagged code).
+  const txnHref = (code: string) => {
+    const p = new URLSearchParams(effective as Record<string, string>);
+    p.set("tax_category", code);
+    return `/transactions?${p.toString()}`;
+  };
 
   const exportQs = new URLSearchParams(effective as Record<string, string>);
   const claimsExportQs = new URLSearchParams(exportQs);
@@ -142,7 +160,11 @@ export default async function TaxPage({
             <tbody className="divide-y divide-gray-100">
               {bucketRows.map(([code, b]) => (
                 <tr key={code} className="hover:bg-gray-50/60">
-                  <td className="px-4 py-2 font-medium">{taxLabel(code)}</td>
+                  <td className="px-4 py-2 font-medium">
+                    <Link href={txnHref(code)} className="hover:text-indigo-700 hover:underline" title="View the transactions in this bucket">
+                      {taxLabel(code)}
+                    </Link>
+                  </td>
                   <td className="px-4 py-2 text-right tabular">{b.lloyd ? money(b.lloyd) : "—"}</td>
                   <td className="px-4 py-2 text-right tabular">{b.milani ? money(b.milani) : "—"}</td>
                   <td className="px-4 py-2 text-right tabular font-semibold">{money(b.total)}</td>

@@ -64,6 +64,20 @@ export const RENTAL_HISTORY: RentalHistory[] = [
     note: "Long-term rental managed by Beyond Property. Loan with BOM (FY22) then ING (FY26).",
     years: [
       {
+        fy: 2026,
+        rentIncome: 22275,
+        expenses: {
+          Interest: 34970.69,
+          "Loan fees": 329,
+        },
+        netRent: -13024.69,
+        expensesComplete: false,
+        flags: [
+          "FY26 in progress: ING investment-loan interest ($34,971) and ING fees ($329) are recorded; rent is 9 months of $2,475/mo from Beyond Property. Council rates, water, insurance and management fees for FY26 are not yet captured, so the loss will be larger.",
+        ],
+        source: "ING loan statement FY25-26 + Beyond Property rent (scripts/record-ashby-interest.ts, reconcile-ashby.ts)",
+      },
+      {
         fy: 2022,
         rentIncome: 18000,
         expenses: {
@@ -168,4 +182,52 @@ export function rentalNetRent(y: RentalYear): number | null {
   if (y.netRent != null) return y.netRent;
   if (y.expensesComplete && y.rentIncome != null) return y.rentIncome - rentalExpenseTotal(y);
   return null;
+}
+
+/** Net rent for a specific property + FY (negative = loss), or null if not held. */
+export function rentalNetForFy(property: RentalProperty, fy: number): number | null {
+  const p = RENTAL_HISTORY.find((x) => x.property === property);
+  const y = p?.years.find((yr) => yr.fy === fy);
+  return y ? rentalNetRent(y) : null;
+}
+
+export interface RentalFyLoss {
+  property: RentalProperty;
+  label: string;
+  /** The requested estimate FY. */
+  fy: number;
+  /** The FY the figure was actually sourced from (may differ when estimated). */
+  usedFy: number;
+  /** Deductible loss as a positive dollar amount (0 when the year was profitable). */
+  loss: number;
+  /** True when usedFy !== fy (no exact-year data, carried from the latest year). */
+  estimated: boolean;
+}
+
+/**
+ * Per-property rental loss for an estimate FY. Uses the exact-year net rent when
+ * available; otherwise carries the most recent year with a computable net,
+ * flagged `estimated`. A profitable year yields loss 0.
+ */
+export function rentalLossForFy(fy: number): RentalFyLoss[] {
+  const out: RentalFyLoss[] = [];
+  for (const p of RENTAL_HISTORY) {
+    let y = p.years.find((yr) => yr.fy === fy && rentalNetRent(yr) != null);
+    let estimated = false;
+    if (!y) {
+      y = [...p.years].sort((a, b) => b.fy - a.fy).find((yr) => rentalNetRent(yr) != null);
+      estimated = true;
+    }
+    if (!y) continue;
+    const net = rentalNetRent(y)!;
+    out.push({
+      property: p.property,
+      label: p.label,
+      fy,
+      usedFy: y.fy,
+      loss: net < 0 ? -net : 0,
+      estimated,
+    });
+  }
+  return out;
 }

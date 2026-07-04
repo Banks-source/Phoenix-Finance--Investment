@@ -89,6 +89,22 @@ export function claimCategoryForCode(code?: string | null): string | null {
   return CLAIM_CATEGORY_BY_CODE[code] ?? null;
 }
 
+// Sub-line label within a claim category (currently only Car & transport), used
+// to fill the FY estimate breakdown from tagged transactions. Labels MUST match
+// the historical breakdown labels in lib/claimsHistory.ts so the columns align.
+export const CLAIM_SUBCATEGORY_BY_CODE: Record<string, string> = {
+  wr_car_parking: "Parking",
+  wr_car_rideshare: "Taxi & rideshare",
+  wr_car_tolls: "Road tolls",
+  wr_car_other: "Other",
+};
+
+/** Sub-line label a tax code rolls up into within its category, or null. */
+export function claimSubcategoryForCode(code?: string | null): string | null {
+  if (!code) return null;
+  return CLAIM_SUBCATEGORY_BY_CODE[code] ?? null;
+}
+
 // Reverse index: internal category → suggested deductible tax bucket (first match).
 const SUGGEST_INDEX: Record<string, string> = {};
 for (const t of TAX_CATEGORIES) {

@@ -60,6 +60,7 @@ export interface FetchOpts {
   type?: string;
   category?: string;
   sub_category?: string;
+  tax_category?: string;
   limit?: number;
   offset?: number;
 }
@@ -75,6 +76,7 @@ export async function fetchTransactions(opts: FetchOpts = {}) {
   if (opts.status) q = q.eq("status", opts.status);
   if (opts.owner) q = q.eq("owner", opts.owner);
   if (opts.type) q = q.eq("type", opts.type);
+  if (opts.tax_category) q = q.eq("tax_category", opts.tax_category);
   if (opts.search) q = q.or(`detail.ilike.%${opts.search}%,merchant.ilike.%${opts.search}%`);
 
   q = q.order("date", { ascending: false });
