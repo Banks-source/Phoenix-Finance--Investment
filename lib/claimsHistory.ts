@@ -29,10 +29,32 @@ export const CLAIM_CATEGORY_ORDER = [
 ] as const;
 export type ClaimCategory = (typeof CLAIM_CATEGORY_ORDER)[number];
 
+/** ATO deduction schedule item each normalised category maps to (for display). */
+export const CLAIM_CATEGORY_DITEM: Record<ClaimCategory, string> = {
+  "Phone & internet": "D5",
+  "Subscriptions & software": "D5",
+  "Home office & tech": "D5",
+  "Car & transport": "D1/D2",
+  "Work from home": "D5",
+  Education: "D4",
+  Donations: "D9",
+  "Managing tax affairs": "D10",
+  "Rental loss (negative gearing)": "Rent 21",
+  Other: "D15",
+};
+
+/** A single sub-line within a category (from the lodged return / workbook). */
+export interface ClaimBreakdownItem {
+  label: string;
+  amount: number;
+}
+
 export interface ClaimYear {
   fy: number; // FY end year
   /** Submitted deductions by normalised category ($, positive). */
   lines: Partial<Record<ClaimCategory, number>>;
+  /** Optional sub-item breakdown per category (from the lodged return / workbook). */
+  breakdown?: Partial<Record<ClaimCategory, ClaimBreakdownItem[]>>;
   /** Sum of the lines above (what was submitted). */
   submittedTotal: number;
   wfhHours?: number; // work-from-home hours (method basis, later years)
@@ -139,6 +161,17 @@ export const CLAIMS_HISTORY: ClaimHistory[] = [
           "Home office & tech": 505, // D5 · tools & equipment
           "Car & transport": 3212, // D1 car (Honda Civic, 2,500km logbook) $2,200 + D2 travel $1,012 (taxi/parking/tolls/car hire)
           "Managing tax affairs": 4400, // D10 · cost of managing tax affairs
+        },
+        breakdown: {
+          "Car & transport": [
+            { label: "D1 · car (Honda Civic, 2,500km logbook)", amount: 2200 },
+            { label: "D2 · taxi", amount: 189 },
+            { label: "D2 · parking", amount: 280 },
+            { label: "D2 · road tolls", amount: 149 },
+            { label: "D2 · car hire", amount: 394 },
+          ],
+          "Home office & tech": [{ label: "D5 · tools & equipment", amount: 505 }],
+          "Managing tax affairs": [{ label: "D10 · other expenses (managing tax affairs)", amount: 4400 }],
         },
         submittedTotal: 11386, // lodged return D1 $2,200 + D2 $1,012 + D5 $3,774 + D10 $4,400
         carKm: 2500,

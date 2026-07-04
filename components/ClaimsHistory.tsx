@@ -1,8 +1,9 @@
 "use client";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   CLAIMS_HISTORY,
   CLAIM_CATEGORY_ORDER,
+  CLAIM_CATEGORY_DITEM,
   claimsHistoryFys,
   claimsHistoryEstimate,
   claimsRefundEstimate,
@@ -42,6 +43,18 @@ export default function ClaimsHistory({
   const computed = useMemo(() => claimsHistoryEstimate(person), [person]);
 
   const cell = (fy: number, cat: (typeof CLAIM_CATEGORY_ORDER)[number]) => byFy.get(fy)?.lines[cat] ?? 0;
+
+  // Sub-item breakdown for a category: the union of sub-line labels across all
+  // years (first-seen order), each with its per-FY amount where documented.
+  const breakdownRows = (cat: (typeof CLAIM_CATEGORY_ORDER)[number]) => {
+    const labels: string[] = [];
+    for (const y of history.years)
+      for (const b of y.breakdown?.[cat] ?? []) if (!labels.includes(b.label)) labels.push(b.label);
+    return labels.map((label) => ({
+      label,
+      byFy: new Map(history.years.map((y) => [y.fy, (y.breakdown?.[cat] ?? []).find((b) => b.label === label)?.amount])),
+    }));
+  };
 
   // Effective FY-estimate for a category = manual override, else computed suggestion.
   const effEstimate = (cat: string) => overrides[person]?.[cat] ?? computed[cat as keyof typeof computed] ?? 0;
@@ -200,7 +213,7 @@ export default function ClaimsHistory({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-xs text-gray-500">
-              <th className="px-4 py-2 text-left font-medium">Deduction</th>
+              <th className="px-4 py-2 text-left font-medium">Deduction · ATO item</th>
               {fys.map((fy) => (
                 <th key={fy} className="px-4 py-2 text-right font-medium">
                   {fyLabel(fy)}
@@ -213,32 +226,54 @@ export default function ClaimsHistory({
             {CLAIM_CATEGORY_ORDER.map((cat) => {
               const ov = overrides[person]?.[cat];
               const suggestion = computed[cat as keyof typeof computed];
+              const subRows = breakdownRows(cat);
               return (
-                <tr key={cat} className="hover:bg-gray-50/60">
-                  <td className="px-4 py-2 font-medium">{cat}</td>
-                  {fys.map((fy) => {
-                    const v = cell(fy, cat);
-                    return (
-                      <td key={fy} className="px-4 py-2 text-right tabular">
-                        {v > 0 ? money(v) : <span className="text-gray-300">—</span>}
-                      </td>
-                    );
-                  })}
-                  <td className="px-2 py-1.5 text-right">
-                    <input
-                      key={`${person}-${cat}`}
-                      type="number"
-                      min={0}
-                      inputMode="decimal"
-                      defaultValue={ov ?? ""}
-                      placeholder={suggestion ? String(suggestion) : "0"}
-                      onBlur={(e) => saveEstimate(cat, e.target.value)}
-                      className={`w-24 rounded-md border px-2 py-1 text-right tabular focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300 ${
-                        ov != null ? "border-indigo-300 bg-indigo-50/40 font-medium text-indigo-800" : "border-gray-200"
-                      } ${saving === cat ? "opacity-60" : ""}`}
-                    />
-                  </td>
-                </tr>
+                <Fragment key={cat}>
+                  <tr className="hover:bg-gray-50/60">
+                    <td className="px-4 py-2 font-medium">
+                      <span className="mr-2 inline-block w-14 shrink-0 rounded bg-gray-100 px-1 py-0.5 text-center font-mono text-[10px] font-medium text-gray-500">
+                        {CLAIM_CATEGORY_DITEM[cat]}
+                      </span>
+                      {cat}
+                    </td>
+                    {fys.map((fy) => {
+                      const v = cell(fy, cat);
+                      return (
+                        <td key={fy} className="px-4 py-2 text-right tabular">
+                          {v > 0 ? money(v) : <span className="text-gray-300">—</span>}
+                        </td>
+                      );
+                    })}
+                    <td className="px-2 py-1.5 text-right">
+                      <input
+                        key={`${person}-${cat}`}
+                        type="number"
+                        min={0}
+                        inputMode="decimal"
+                        defaultValue={ov ?? ""}
+                        placeholder={suggestion ? String(suggestion) : "0"}
+                        onBlur={(e) => saveEstimate(cat, e.target.value)}
+                        className={`w-24 rounded-md border px-2 py-1 text-right tabular focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300 ${
+                          ov != null ? "border-indigo-300 bg-indigo-50/40 font-medium text-indigo-800" : "border-gray-200"
+                        } ${saving === cat ? "opacity-60" : ""}`}
+                      />
+                    </td>
+                  </tr>
+                  {subRows.map((br) => (
+                    <tr key={`${cat}-${br.label}`} className="text-xs text-gray-500">
+                      <td className="py-1 pl-[4.75rem] pr-4">{br.label}</td>
+                      {fys.map((fy) => {
+                        const v = br.byFy.get(fy);
+                        return (
+                          <td key={fy} className="px-4 py-1 text-right tabular">
+                            {v != null ? money(v) : <span className="text-gray-300">—</span>}
+                          </td>
+                        );
+                      })}
+                      <td className="px-4 py-1 text-right text-gray-300">—</td>
+                    </tr>
+                  ))}
+                </Fragment>
               );
             })}
             {/* Totals */}
