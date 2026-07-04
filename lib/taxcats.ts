@@ -15,8 +15,16 @@ export interface TaxCategoryDef {
 }
 
 export const TAX_CATEGORIES: TaxCategoryDef[] = [
-  // Individual
-  { code: "d1_car", label: "Work-related car", schedule: "individual", deductible: true, suggestFrom: ["Car & Transport", "Transport"] },
+  // Individual — work-related personal deductions (feed the FY estimate column)
+  { code: "wr_phone", label: "Phone & internet", schedule: "individual", deductible: true },
+  { code: "wr_subscriptions", label: "Subscriptions & software", schedule: "individual", deductible: true, suggestFrom: ["Subscriptions"] },
+  { code: "wr_car_parking", label: "Car & transport — Parking", schedule: "individual", deductible: true },
+  { code: "wr_car_rideshare", label: "Car & transport — Taxi & rideshare", schedule: "individual", deductible: true },
+  { code: "wr_car_tolls", label: "Car & transport — Road tolls", schedule: "individual", deductible: true },
+  { code: "wr_car_other", label: "Car & transport — Other", schedule: "individual", deductible: true, suggestFrom: ["Car & Transport", "Transport"] },
+  { code: "wr_education", label: "Education", schedule: "individual", deductible: true },
+  // Individual — ATO D-item codes (kept for anything already tagged / other claims)
+  { code: "d1_car", label: "Work-related car", schedule: "individual", deductible: true },
   { code: "d2_travel", label: "Work-related travel", schedule: "individual", deductible: true, suggestFrom: ["Travel"] },
   { code: "d3_clothing", label: "Work-related clothing & laundry", schedule: "individual", deductible: true },
   { code: "d4_self_education", label: "Self-education", schedule: "individual", deductible: true },
@@ -53,6 +61,32 @@ export function taxLabel(code?: string | null): string {
 export function isDeductibleCode(code?: string | null): boolean {
   if (!code) return false;
   return TAX_CATEGORY_BY_CODE[code]?.deductible ?? false;
+}
+
+// Maps a tax code to the normalised claim-history category it rolls up into, so
+// tagged transactions can seed the FY estimate column in the deductions history.
+// Values MUST match CLAIM_CATEGORY_ORDER labels in lib/claimsHistory.ts. Codes
+// with no clean 1:1 bucket are omitted (return null → they don't seed a row).
+export const CLAIM_CATEGORY_BY_CODE: Record<string, string> = {
+  wr_phone: "Phone & internet",
+  wr_subscriptions: "Subscriptions & software",
+  wr_car_parking: "Car & transport",
+  wr_car_rideshare: "Car & transport",
+  wr_car_tolls: "Car & transport",
+  wr_car_other: "Car & transport",
+  wr_education: "Education",
+  // legacy D-codes still roll up where unambiguous
+  d1_car: "Car & transport",
+  d2_travel: "Car & transport",
+  d4_self_education: "Education",
+  d9_gifts: "Donations",
+  d10_managing_tax: "Managing tax affairs",
+};
+
+/** Normalised claim-history category a tax code rolls up into, or null. */
+export function claimCategoryForCode(code?: string | null): string | null {
+  if (!code) return null;
+  return CLAIM_CATEGORY_BY_CODE[code] ?? null;
 }
 
 // Reverse index: internal category → suggested deductible tax bucket (first match).

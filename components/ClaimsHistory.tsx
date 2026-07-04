@@ -13,7 +13,7 @@ import {
 } from "@/lib/claimsHistory";
 import { money } from "@/lib/format";
 import { fyLabel } from "@/lib/fy";
-import { taxLabel } from "@/lib/taxcats";
+import { taxLabel, claimCategoryForCode } from "@/lib/taxcats";
 import type { TaggedClaim } from "@/lib/queries";
 import { AlertTriangle, ChevronRight, Link2 } from "lucide-react";
 
@@ -69,8 +69,23 @@ export default function ClaimsHistory({
     }));
   };
 
-  // Effective FY-estimate for a category = manual override, else computed suggestion.
-  const effEstimate = (cat: string) => overrides[person]?.[cat] ?? computed[cat as keyof typeof computed] ?? 0;
+  // FY26 transactions tagged to this person, rolled up into the normalised claim
+  // category they belong to — the auto-seed for the estimate column below.
+  const taggedByCat = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const t of taggedClaims) {
+      if (t.owner !== person) continue;
+      const cat = claimCategoryForCode(t.tax_category);
+      if (!cat) continue;
+      m[cat] = (m[cat] ?? 0) + t.amount;
+    }
+    return m;
+  }, [taggedClaims, person]);
+
+  // Effective FY-estimate for a category = manual override, else the FY26 tagged
+  // total, else the workbook-derived suggestion.
+  const effEstimate = (cat: string) =>
+    overrides[person]?.[cat] ?? taggedByCat[cat] ?? computed[cat as keyof typeof computed] ?? 0;
   const estimateTotal = CLAIM_CATEGORY_ORDER.reduce((s, cat) => s + effEstimate(cat), 0);
 
   // The rental loss is an income component (a negative net-rent line), not a
@@ -199,7 +214,9 @@ export default function ClaimsHistory({
           <h2 className="text-sm font-semibold">Personal return · deductions & end-to-end refund</h2>
           <p className="text-[11px] text-gray-500">
             Deductions by category, then the full return to the refund. Toggle <b>As lodged</b> (assessed) vs{" "}
-            <b>Submitted</b> (workbook). {fyLabel(estimateFy)} is an editable estimate.
+            <b>Submitted</b> (workbook). {fyLabel(estimateFy)} is an editable estimate \u2014{" "}
+            <span className="text-emerald-700">green</span> cells are auto-summed from tagged transactions,{" "}
+            <span className="text-indigo-700">indigo</span> are manual overrides.
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -265,7 +282,11 @@ export default function ClaimsHistory({
           <tbody className="divide-y divide-gray-100">
             {CLAIM_CATEGORY_ORDER.map((cat) => {
               const ov = overrides[person]?.[cat];
+              const tagged = taggedByCat[cat];
               const suggestion = computed[cat as keyof typeof computed];
+              // Value shown in the est cell when there's no manual override: the
+              // FY26 tagged total (rounded), else blank (placeholder shows suggestion).
+              const autoValue = tagged != null ? Math.round(tagged) : undefined;
               const subRows = breakdownRows(cat);
               const isOpen = expanded.has(cat);
               return (
@@ -301,15 +322,26 @@ export default function ClaimsHistory({
                     })}
                     <td className="px-2 py-1.5 text-right">
                       <input
-                        key={`${person}-${cat}`}
+                        key={`${person}-${cat}-${ov ?? ""}-${autoValue ?? ""}`}
                         type="number"
                         min={0}
                         inputMode="decimal"
-                        defaultValue={ov ?? ""}
+                        defaultValue={ov ?? autoValue ?? ""}
                         placeholder={suggestion ? String(suggestion) : "0"}
                         onBlur={(e) => saveEstimate(cat, e.target.value)}
+                        title={
+                          ov != null
+                            ? "Manual override — type to change"
+                            : tagged != null
+                            ? `Auto from ${money(tagged)} of tagged FY26 transactions — type to override`
+                            : "Estimate — type to override"
+                        }
                         className={`w-24 rounded-md border px-2 py-1 text-right tabular focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-300 ${
-                          ov != null ? "border-indigo-300 bg-indigo-50/40 font-medium text-indigo-800" : "border-gray-200"
+                          ov != null
+                            ? "border-indigo-300 bg-indigo-50/40 font-medium text-indigo-800"
+                            : tagged != null
+                            ? "border-emerald-200 bg-emerald-50/30 font-medium text-emerald-800"
+                            : "border-gray-200"
                         } ${saving === cat ? "opacity-60" : ""}`}
                       />
                     </td>
