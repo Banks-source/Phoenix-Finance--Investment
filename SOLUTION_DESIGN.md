@@ -1,7 +1,7 @@
 # Phoenix Finance — Solution Design (v1: Budget)
 
 **Status:** Draft — pending sign-off on §4 (partition architecture) before implementation
-**Last updated:** 2026-07-02
+**Last updated:** 2026-08-08
 
 ## 1. Stack
 
@@ -90,3 +90,41 @@ Raw bank exports won't include Category/Sub Category/Merchant-cleaned fields —
 
 - Tax pack, Kubera integration, investment thesis engine, spending optimisation alerts — see PRD §8 (v2–v4, noted only).
 - Any trade execution — the app will eventually signal, never execute (v3).
+
+## 9. Agent-layer architecture (v3 — LLM/MCP access, added 2026-08-08)
+
+Forward-looking design for how Phoenix's investment-thesis data becomes queryable by Claude, ChatGPT, and local models, once v3 (investment thesis engine) is built. Captured now so the shape is agreed before implementation. Tracked as issues #3–#14.
+
+### 9.1 Kubera as the aggregator, Phoenix as the intelligence layer
+
+Lloyd already has NAB, CBA, Trezor, SwyftX, MetaMask and Phantom connected inside Kubera. Kubera exposes a personal REST API (30 req/min, 500–1000 req/day depending on tier). Rather than building six separate wallet/exchange/bank integrations, Phoenix's sync layer (#3) reads that one endpoint and stores an append-only time-series in `portfolio_snapshots` — so Phoenix retains full history even if Kubera is later cancelled.
+
+**Critical boundary:** Kubera provides balances and holdings, not transaction-level detail. So the two data pipelines stay separate and serve different purposes:
+
+| Pipeline | Source | Feeds |
+|---|---|---|
+| Balances / holdings / net worth | Kubera API sync (#3) | Sleeve mapping (#4), allocation dashboard (#5), hard-rule checks (#7) |
+| Categorised transactions | NAB/CBA CSV pipeline (#10) | v1 Budget (§5–§6 above), the spend denominator used by hard rule 4 |
+
+**Rejected:** direct CDR aggregator integration (Basiq/Frollo/Adatree) — built for accredited businesses with 12-month minimums and per-user billing, disproportionate for a two-person household app when Kubera already holds the connections.
+
+### 9.2 Thesis engine (#4–#8)
+
+Kubera assets are mapped to the six investment-thesis sleeves (BTC/crypto, AI/tech + materials, EM equity, health/biotech, dry powder, metals) against **investable net worth** (includes super, excludes PPR). This mapping is what makes the allocation dashboard, the automated hard-rule checks (concentration cap, leverage cap, liquidity floor, co-investment rule), and the timed (≤30 min) quarterly review workflow possible. Legacy positions that breach the thesis — starting with the ~$150K biofuels holding inside super — are flagged separately rather than counted as compliant.
+
+### 9.3 Read-only Agent API (#12)
+
+A narrow, versioned HTTP surface (`/api/agent/v1/*`) sits between the database and any LLM client. It exposes **questions, not schema** — `get_allocation`, `get_net_worth`, `check_hard_rules`, `scan_kill_criteria` — rather than a generic query endpoint. This is deliberate: a `query_table`-style endpoint would both leak the whole database through one hole and produce worse model output than purpose-built tools. No POST/PUT/PATCH/DELETE exists on this router; it is structurally read-only, not read-only by convention. Milani's data partition (§4) is enforced server-side here, never trusted to a client-supplied filter.
+
+### 9.4 Two-tier MCP access (#13, #14)
+
+| Tier | Transport | Data | Reaches |
+|---|---|---|---|
+| A | Remote MCP server, OAuth 2.1 + PKCE, hosted with the Vercel app | Aggregates only — allocations, rule statuses, net-worth history. No raw transactions, no account/wallet identifiers. | Claude (web/Cowork/mobile/Desktop) and ChatGPT, inside existing chat subscriptions — no separate API billing |
+| B | Local stdio MCP server, runs on Lloyd's machine, never deployed or network-reachable | Full detail — transaction line items, wallet-level holdings, account detail | Claude Desktop and local models (LM Studio, llama.cpp) only |
+
+**Build order: tier B first.** It requires no public endpoint, carries materially less exposure given the live creditor matters, and is sufficient if Claude Desktop plus a local model meets the need. Tier A (remote) is built only if phone or ChatGPT access is specifically wanted — it necessarily exposes an endpoint reachable from Anthropic's/OpenAI's cloud infrastructure, since neither can reach a purely local server for web/mobile clients.
+
+**Constant across both tiers:** every tool call is logged (client identity, tool, arguments, timestamp), and no tool ever writes, places a trade, or moves money. The PRD's "signals only, never auto-executes" rule is absolute and extends to every agent-facing surface, not just the human-facing UI.
+
+**Setup note, recorded from direct experience standing up the GitHub connector used to create these issues:** OAuth-capable connectors (GitHub App or equivalent) require two separate steps — *authorization* (identity) and *installation* (resource access) — and it's easy to complete only the first, producing a confusing "works for reads, 403s on writes" state. Confirm any such connector appears under the provider's *installations* list, not just its *authorized applications* list, before assuming it's fully wired up. Also always initiate the connection from the client's own "Connect" action rather than a provider's install page directly, so OAuth state round-trips correctly.
