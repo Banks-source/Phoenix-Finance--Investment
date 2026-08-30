@@ -7,9 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "backfill": "tsx scripts/backfill.ts",
     "analyse": "tsx scripts/analyse.ts",
-    "validate": "tsx scripts/validate.ts"
+    "validate": "tsx scripts/validate.ts",
+    "kubera:sync": "tsx scripts/kubera_sync.ts"
   },
   "dependencies": {
     "next": "14.2.5",
@@ -37,6 +40,7 @@
     "autoprefixer": "^10.4.19",
     "tsx": "^4.16.2",
     "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.5"
+    "eslint-config-next": "14.2.5",
+    "vitest": "^2.0.5"
   }
 }
