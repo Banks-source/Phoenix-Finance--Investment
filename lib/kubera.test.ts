@@ -55,6 +55,21 @@ describe("listPortfolios / getPortfolioDetail", () => {
     expect(init.headers["x-api-token"]).toBe("test-key");
     expect(init.headers["x-signature"]).toMatch(/^[0-9a-f]{64}$/);
     expect(init.headers["x-timestamp"]).toMatch(/^\d+$/);
+
+    // Regression check: the signature must be computed over the FULL request
+    // path including the /api/v3/data prefix, not just the part after it —
+    // signing the wrong (shorter) path produces a different digest that
+    // Kubera rejects with a 401 "Invalid Signature", which is exactly what
+    // happened before this was caught against the live API.
+    const expectedSig = signRequest(
+      "test-secret",
+      "test-key",
+      init.headers["x-timestamp"],
+      "GET",
+      "/api/v3/data/portfolio",
+      ""
+    );
+    expect(init.headers["x-signature"]).toBe(expectedSig);
   });
 
   it("requests the portfolio-detail path with the given id", async () => {
@@ -65,9 +80,9 @@ describe("listPortfolios / getPortfolioDetail", () => {
         data: {
           asset: [],
           debt: [],
-          totalAssets: { amount: 100, currency: "AUD" },
-          totalDebts: { amount: 20, currency: "AUD" },
-          netWorth: { amount: 80, currency: "AUD" },
+          assetTotal: 100,
+          debtTotal: 20,
+          netWorth: 80,
         },
         errorCode: 0,
       }),
@@ -77,7 +92,7 @@ describe("listPortfolios / getPortfolioDetail", () => {
     const { getPortfolioDetail } = await import("./kubera");
     const detail = await getPortfolioDetail("p1");
 
-    expect(detail.netWorth.amount).toBe(80);
+    expect(detail.netWorth).toBe(80);
     expect(fetchMock.mock.calls[0][0]).toBe("https://api.kubera.com/api/v3/data/portfolio/p1");
   });
 

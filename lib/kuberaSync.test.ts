@@ -32,9 +32,9 @@ describe("runKuberaSync", () => {
     getPortfolioDetailMock.mockImplementation(async (id: string) => ({
       asset: [{ name: "BTC" }],
       debt: [],
-      totalAssets: { amount: 1000, currency: "AUD" },
-      totalDebts: { amount: 0, currency: "AUD" },
-      netWorth: { amount: 1000, currency: "AUD" },
+      assetTotal: 1000,
+      debtTotal: 0,
+      netWorth: 1000,
     }));
 
     const { runKuberaSync } = await import("./kuberaSync");
@@ -76,9 +76,9 @@ describe("runKuberaSync", () => {
     getPortfolioDetailMock.mockResolvedValue({
       asset: [],
       debt: [],
-      totalAssets: { amount: 0, currency: "AUD" },
-      totalDebts: { amount: 0, currency: "AUD" },
-      netWorth: { amount: 0, currency: "AUD" },
+      assetTotal: 0,
+      debtTotal: 0,
+      netWorth: 0,
     });
     insertMock.mockResolvedValue({ error: { message: "insert failed" } });
 

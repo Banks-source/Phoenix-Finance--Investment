@@ -1,11 +1,16 @@
 import { createHmac } from "crypto";
 
-// Kubera Data API v3 client. Auth per https://help.kubera.com/article/171-kubera-data-api-v3:
-// every request carries x-api-token, x-timestamp (unix seconds) and an
-// x-signature HMAC-SHA256 of (apiKey + timestamp + method + path + compact-JSON-body),
-// hex-encoded, signed with the API secret. Server-only — never call from a client component.
+// Kubera Data API v3 client. Auth per https://help.kubera.com/article/171-kubera-data-api-v3
+// (confirmed against the reference implementation at
+// github.com/the-mace/kubera-python-api/blob/main/kubera/auth.py): every
+// request carries x-api-token, x-timestamp (unix seconds) and an
+// x-signature HMAC-SHA256 of (apiKey + timestamp + method + full-request-path
+// + compact-JSON-body), hex-encoded, signed with the API secret. Critically,
+// "full request path" means including the /api/v3/data prefix, not just the
+// part after it — server-only, never call from a client component.
 
-const BASE_URL = "https://api.kubera.com/api/v3/data";
+const HOST = "https://api.kubera.com";
+const API_PREFIX = "/api/v3/data";
 
 export type KuberaPortfolioSummary = {
   id: string;
@@ -13,14 +18,17 @@ export type KuberaPortfolioSummary = {
   currency: string;
 };
 
-export type KuberaMoney = { amount: number; currency: string };
-
+// Portfolio-detail totals are plain numbers, not {amount, currency} objects —
+// confirmed against the live API (the docs' abbreviated example was wrong on
+// this point). The detail response carries no currency of its own; the
+// portfolio's display currency comes from KuberaPortfolioSummary.currency.
+// Individual asset/debt line items do carry per-item {amount, currency}.
 export type KuberaPortfolioDetail = {
   asset: unknown[];
   debt: unknown[];
-  totalAssets: KuberaMoney;
-  totalDebts: KuberaMoney;
-  netWorth: KuberaMoney;
+  assetTotal: number;
+  debtTotal: number;
+  netWorth: number;
 };
 
 type KuberaEnvelope<T> = { data: T; errorCode: number; errorMessage?: string };
@@ -61,9 +69,10 @@ async function kuberaRequest<T>(
   const { apiKey, apiSecret } = requireCredentials();
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const bodyStr = body === undefined ? "" : JSON.stringify(body);
-  const signature = signRequest(apiSecret, apiKey, timestamp, method, path, bodyStr);
+  const fullPath = `${API_PREFIX}${path}`;
+  const signature = signRequest(apiSecret, apiKey, timestamp, method, fullPath, bodyStr);
 
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${HOST}${fullPath}`, {
     method,
     headers: {
       "x-api-token": apiKey,
