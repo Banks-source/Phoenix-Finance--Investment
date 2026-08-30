@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/kubera/sync", "schedule": "0 6 * * *" }
+  ]
+}
