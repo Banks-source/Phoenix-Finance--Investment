@@ -36,10 +36,13 @@ export const RULES: Rule[] = [
   { re: /ASHBY LOAN|ASHBY/, category: "Money Movement", sub_category: "Ashby Loan", type: "debt" },
   { re: /ZIPMONEY|ZIP MONEY/, category: "Money Movement", sub_category: "ZipMoney", type: "debt" },
 
-  // ---- Transfers / money movement ----------------------------------------
-  { re: /LINKED ACC TRNS|INTERNET PAYMENT|LINKED ACC/, category: "Money Movement", sub_category: "Card payment", type: "transfers" },
-  { re: /TRANSFER (TO|FROM|DEBIT|CREDIT|IN|OUT)|FAST TRANSFER|INTERNET TRANSFER|COMMBANK APP/, category: "Money Movement", type: "transfers" },
-  { re: /\bBPAY\b|PAYID|NETBANK/, category: "Money Movement", type: "transfers" },
+  // ---- Transfers / money movement (unambiguous only) ----------------------
+  // The generic BPAY/PAYID/"Transfer to X"/internet-payment patterns are
+  // *not* here — they're near the bottom of this file, checked only after
+  // every merchant/biller rule, because BPAY is how most bills get paid in
+  // Australia. A rule this generic checked this early was swallowing real
+  // bill payments (e.g. "BPAY ... AGL Energy") into Money Movement before
+  // the AGL/Utilities rule below ever got a chance to match.
   { re: /CBA ATM|ATM DEBIT|CASH WITHDRAWAL|CASH WITHDRAWL/, category: "Money Movement", sub_category: "Cash Withdrawal", type: "needs_categorisation" },
   { re: /MILANI SIMIC|LLOYD THOMAS|LLOYD EDWARD THOMA/, category: "Money Movement", sub_category: "Internal transfer", type: "transfers" },
 
@@ -104,6 +107,17 @@ export const RULES: Rule[] = [
 
   // ---- Extra food / cafe merchants ---------------------------------------
   { re: /SFS SCUH|SCUH |MATSO|YIROS|RICE BOI|ROLLD|NGON|GRANDMA DANG|HAPPY DOUGH|MONKEY PUNCH|FUDGEES|FIOR DI LATTE|COOLUM SOCIAL|BEAN THERE|ROADSIDE ROAST|KENILWORTH COUNTRY BAK|BAKERS DELIGHT|SEAFOOD|DELI\b|FISH ?&? ?CHIP|IGA EXPRESS|KOMEKHUN|MOUNT COOLUM MT/, category: "Dining Out", type: "spending" },
+
+  // ---- Generic transfer/bill-payment patterns — last resort ---------------
+  // Checked only after every merchant/biller rule above. BPAY, "Transfer to
+  // X", and internet-payment descriptions are how most bills get paid in
+  // Australia, not just genuine account-to-account moves — so anything that
+  // was actually a recognisable bill (AGL, Telstra, rent, etc.) has already
+  // matched a more specific rule by this point. What's left here really is
+  // unrecognised money movement.
+  { re: /LINKED ACC TRNS|INTERNET PAYMENT|LINKED ACC/, category: "Money Movement", sub_category: "Card payment", type: "transfers" },
+  { re: /TRANSFER (TO|FROM|DEBIT|CREDIT|IN|OUT)|FAST TRANSFER|INTERNET TRANSFER|COMMBANK APP/, category: "Money Movement", type: "transfers" },
+  { re: /\bBPAY\b|PAYID|NETBANK/, category: "Money Movement", type: "transfers" },
 
   // ---- Square merchants (overwhelmingly food/cafe here) — last resort -----
   { re: /\bSQ \*/, category: "Dining Out", type: "spending" },
