@@ -3,8 +3,8 @@
 import { TxnType } from "./taxonomy";
 
 export interface FYRange {
-  fyEndYear: number; // 2026 for FY2025-26
-  label: string; // "FY25-26"
+  fyEndYear: number; // 2026 for FY26
+  label: string; // "FY26"
   start: string; // ISO
   end: string; // ISO
 }
@@ -24,11 +24,9 @@ export function fyRange(fyEndYear: number): FYRange {
   };
 }
 
-/** "FY25-26" */
+/** "FY26" — AU convention, named by the year the FY ends in (not a range). */
 export function fyLabel(fyEndYear: number): string {
-  const a = String(fyEndYear - 1).slice(2);
-  const b = String(fyEndYear).slice(2);
-  return `FY${a}-${b}`;
+  return `FY${String(fyEndYear).slice(2)}`;
 }
 
 /** Build the list of periods to offer in filters, given the data's date span. */
@@ -50,13 +48,16 @@ export function periodsFromDates(dates: string[]): {
 }
 
 export interface PeriodFilter {
-  kind: "all" | "year" | "fy";
+  kind: "all" | "year" | "fy" | "custom";
   value?: number;
+  from?: string; // ISO, custom only
+  to?: string; // ISO, custom only
 }
 
-export function parsePeriod(sp: { period?: string; value?: string }): PeriodFilter {
+export function parsePeriod(sp: { period?: string; value?: string; from?: string; to?: string }): PeriodFilter {
   if (sp.period === "year" && sp.value) return { kind: "year", value: Number(sp.value) };
   if (sp.period === "fy" && sp.value) return { kind: "fy", value: Number(sp.value) };
+  if (sp.period === "custom" && sp.from && sp.to) return { kind: "custom", from: sp.from, to: sp.to };
   return { kind: "all" };
 }
 
@@ -67,12 +68,14 @@ export function periodBounds(p: PeriodFilter): [string, string] | null {
     const r = fyRange(p.value);
     return [r.start, r.end];
   }
+  if (p.kind === "custom" && p.from && p.to) return [p.from, p.to];
   return null;
 }
 
 export function periodLabel(p: PeriodFilter): string {
   if (p.kind === "year") return String(p.value);
   if (p.kind === "fy") return fyLabel(p.value!);
+  if (p.kind === "custom") return `${p.from} – ${p.to}`;
   return "All time";
 }
 

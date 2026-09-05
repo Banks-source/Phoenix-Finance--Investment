@@ -410,35 +410,43 @@ export function claimsHistoryFys(): number[] {
   return [...set].sort((a, b) => a - b);
 }
 
-/** The financial year the app builds an estimate for (FY25-26, ended 30 Jun 2026). */
-export const CLAIMS_ESTIMATE_FY = 2026;
+/**
+ * The financial year the app builds a live estimate for. Was FY26 (ended 30
+ * Jun 2026, ~5 Jul 2026 lodgment deadline per PRD); rolled forward to FY27
+ * now that FY26 has closed. NOTE: FY26 itself was never added as a finalised
+ * entry to CLAIMS_HISTORY above — the real lodged FY26 figures (deduction
+ * lines, refund) still need to be added there once available. The FY26
+ * income-statement actuals that were here are preserved just below so
+ * they're not lost when that entry gets added.
+ */
+export const CLAIMS_ESTIMATE_FY = 2027;
+
+// FY26 actuals, kept for when a real CLAIMS_HISTORY entry for fy:2026 is
+// added (grossWages/paygWithheld go straight in; deduction lines and refund
+// still need the lodged return):
+//   lloyd:  grossWages 286154.65, paygWithheld 100669.00 — IAG income statement FY2025-26, tax ready, reported 02/07/2026
+//   milani: grossWages  82149.98, paygWithheld  17086.00 — Myer income statement FY2025-26, NOT tax ready, reported 18/06/2026
 
 /**
  * Actual income for the estimate year, from finalised ATO income statements /
  * PAYG summaries (kept in the repo). When present these override the prior-year
  * seed in the refund estimate. `grossWages` is the STP *total gross* (includes
  * bonuses & leave, net of pre-tax salary sacrifice); `paygWithheld` is PAYGW.
+ * Empty for FY27 — no income statement exists this early in the year yet;
+ * claimsRefundEstimate() correctly falls back to the most recent documented
+ * year (FY25) until a FY26-27 statement is added here.
  */
 export const CLAIMS_ESTIMATE_INCOME: Partial<
   Record<ClaimPerson, { grossWages: number; paygWithheld: number; source: string }>
-> = {
-  lloyd: {
-    grossWages: 286154.65, // IAG income statement FY2025-26 · total gross
-    paygWithheld: 100669.0, // PAYGW amount
-    source: "ATO income statement FY2025-26 (IAG, tax ready, reported 02/07/2026)",
-  },
-  milani: {
-    grossWages: 82149.98, // Myer income statement FY2025-26 · total gross
-    paygWithheld: 17086.0, // PAYGW amount
-    source: "ATO income statement FY2025-26 (Myer, NOT tax ready, reported 18/06/2026)",
-  },
-};
+> = {};
 
 /**
  * Fallback estimate seeds for categories with no workbook history (e.g. the
- * Ocean Grove rental loss). Used only when there's nothing to average. The
- * FY26 rental loss is carried from the FY2025 result (−$71,451) and remains
- * editable — confirm the loss sits on Lloyd's personal return (Ocean Grove /
+ * Ocean Grove rental loss). Used only when there's nothing to average. This
+ * is still the FY2025 figure (−$71,451), now two years stale since there's
+ * no FY2026 CLAIMS_HISTORY entry to carry forward from instead — update once
+ * FY2026's actual rental result is known. Remains editable in the UI either
+ * way — confirm the loss sits on Lloyd's personal return (Ocean Grove /
  * Inalaa Pty Ltd ownership is unresolved).
  */
 export const CLAIMS_ESTIMATE_SEED: Partial<Record<ClaimPerson, Partial<Record<ClaimCategory, number>>>> = {

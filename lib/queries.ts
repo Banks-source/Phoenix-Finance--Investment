@@ -137,6 +137,50 @@ export async function fetchCategoryTotals(period?: PeriodFilter) {
   return [...map.values()].sort((a, b) => a.net - b.net);
 }
 
+export interface CategoryMonthlyTrend {
+  /** Categories with any spend in the period, sorted by total (desc). */
+  categories: string[];
+  /** One point per month; each category present as a numeric key alongside `month`. */
+  series: ({ month: string } & Record<string, number | string>)[];
+}
+
+/**
+ * Monthly spend by category for a period (excludes Income/Transfers, same as
+ * every other spend total in the app). Returns every category with any spend
+ * — the Overview trend chart picks its own top N and lets the rest be added.
+ */
+export async function fetchCategoryMonthlyTrend(period?: PeriodFilter): Promise<CategoryMonthlyTrend> {
+  const b = period ? periodBounds(period) : null;
+  const rows = await fetchAll<{ date: string; category: string | null; type: string; amount: number }>((c) => {
+    let q = c.from("transactions").select("date, category, type, amount").eq("status", "approved");
+    if (b) q = q.gte("date", b[0]).lte("date", b[1]);
+    return q;
+  });
+
+  const byMonth = new Map<string, Map<string, number>>();
+  const totals = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.category || r.type === "income" || r.type === "transfers") continue;
+    const month = r.date.slice(0, 7); // YYYY-MM
+    if (!byMonth.has(month)) byMonth.set(month, new Map());
+    const m = byMonth.get(month)!;
+    const abs = Math.abs(Number(r.amount));
+    m.set(r.category, (m.get(r.category) ?? 0) + abs);
+    totals.set(r.category, (totals.get(r.category) ?? 0) + abs);
+  }
+
+  const categories = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+  const months = [...byMonth.keys()].sort();
+  const series = months.map((month) => {
+    const point: { month: string } & Record<string, number | string> = { month };
+    const m = byMonth.get(month)!;
+    for (const cat of categories) point[cat] = m.get(cat) ?? 0;
+    return point;
+  });
+
+  return { categories, series };
+}
+
 /** Net by sub-category for a given transaction type in a period (e.g. income sources). */
 export async function fetchSubCategoryTotals(type: string, period?: PeriodFilter) {
   const b = period ? periodBounds(period) : null;

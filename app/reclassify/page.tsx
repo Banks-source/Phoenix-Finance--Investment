@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function ReclassifyPage({
   searchParams,
 }: {
-  searchParams: { period?: string; value?: string; category?: string; sub_category?: string; type?: string };
+  searchParams: { period?: string; value?: string; from?: string; to?: string; category?: string; sub_category?: string; type?: string };
 }) {
   const { fys } = await getAvailablePeriods();
 
@@ -16,7 +16,7 @@ export default async function ReclassifyPage({
   const effective =
     !searchParams.period && fys.length > 0
       ? { period: "fy", value: String(fys[0]) }
-      : { period: searchParams.period, value: searchParams.value };
+      : { period: searchParams.period, value: searchParams.value, from: searchParams.from, to: searchParams.to };
   const period = parsePeriod(effective);
 
   const { rows } = await fetchAllTransactions({
@@ -33,6 +33,8 @@ export default async function ReclassifyPage({
   const back = new URLSearchParams();
   if (effective.period) back.set("period", effective.period);
   if (effective.value) back.set("value", effective.value);
+  if (effective.from) back.set("from", effective.from);
+  if (effective.to) back.set("to", effective.to);
   const backHref = `/?${back.toString()}`;
 
   return (

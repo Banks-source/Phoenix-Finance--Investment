@@ -13,7 +13,7 @@ const PAGE_SIZE = 100;
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: { period?: string; value?: string; search?: string; category?: string; owner?: string; tax_category?: string; page?: string };
+  searchParams: { period?: string; value?: string; from?: string; to?: string; search?: string; category?: string; owner?: string; tax_category?: string; page?: string };
 }) {
   const page = Math.max(1, Number(searchParams.page ?? 1));
   const offset = (page - 1) * PAGE_SIZE;
@@ -46,6 +46,8 @@ export default async function TransactionsPage({
     const p = new URLSearchParams();
     if (searchParams.period) p.set("period", searchParams.period);
     if (searchParams.value) p.set("value", searchParams.value);
+    if (searchParams.from) p.set("from", searchParams.from);
+    if (searchParams.to) p.set("to", searchParams.to);
     if (searchParams.search) p.set("search", searchParams.search);
     if (searchParams.owner) p.set("owner", searchParams.owner);
     if (searchParams.category) p.set("category", searchParams.category);
@@ -65,6 +67,8 @@ export default async function TransactionsPage({
       <form className="flex flex-wrap items-center gap-2" action="/transactions">
         {searchParams.period && <input type="hidden" name="period" value={searchParams.period} />}
         {searchParams.value && <input type="hidden" name="value" value={searchParams.value} />}
+        {searchParams.from && <input type="hidden" name="from" value={searchParams.from} />}
+        {searchParams.to && <input type="hidden" name="to" value={searchParams.to} />}
         <input
           name="search"
           placeholder="Search detail or merchant…"

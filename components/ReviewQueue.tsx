@@ -3,6 +3,7 @@ import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Txn } from "@/lib/queries";
 import { CATEGORIES, resolveType } from "@/lib/taxonomy";
+import { deductibleBucketsBySchedule, SCHEDULE_LABELS } from "@/lib/taxcats";
 import { money } from "@/lib/format";
 import { TypeBadge } from "@/components/ui";
 import { Check, CheckCheck, ChevronDown, ChevronRight, Undo2, X } from "lucide-react";
@@ -15,11 +16,24 @@ async function post(body: unknown) {
   });
 }
 
+// Tax tagging is a separate endpoint/layer from budget review (deductible /
+// tax_category / tax_note only — never touches status or budget category).
+async function postTax(body: unknown) {
+  await fetch("/api/claims", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+const TAX_BUCKETS = deductibleBucketsBySchedule();
+
 export default function ReviewQueue({ rows }: { rows: Txn[] }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [bulkCat, setBulkCat] = useState("");
+  const [bulkTaxCat, setBulkTaxCat] = useState("");
   const [busy, setBusy] = useState(false);
   const [lastApproved, setLastApproved] = useState<string[] | null>(null);
   const [, startTransition] = useTransition();
@@ -83,6 +97,18 @@ export default function ReviewQueue({ rows }: { rows: Txn[] }) {
     // Keep status pending so you can still eyeball before approving.
     await post({ ids: [...selected], category: bulkCat, keepStatus: true });
     setBulkCat("");
+    refresh();
+  }
+  async function applyTaxToSelected() {
+    if (!selected.size || !bulkTaxCat) return;
+    setBusy(true);
+    await postTax({ ids: [...selected], tax_category: bulkTaxCat });
+    setBulkTaxCat("");
+    refresh();
+  }
+  async function setRowTaxCategory(id: string, tax_category: string) {
+    setBusy(true);
+    await postTax({ id, tax_category });
     refresh();
   }
   async function approveRow(id: string, category?: string) {
@@ -163,6 +189,29 @@ export default function ReviewQueue({ rows }: { rows: Txn[] }) {
           Apply to {selected.size}
         </button>
 
+        <div className="mx-1 h-5 w-px bg-gray-200" />
+
+        <select
+          className="select text-sm"
+          value={bulkTaxCat}
+          onChange={(e) => setBulkTaxCat(e.target.value)}
+          disabled={!selected.size}
+        >
+          <option value="">Set tax category…</option>
+          {TAX_BUCKETS.map(({ schedule, items }) => (
+            <optgroup key={schedule} label={SCHEDULE_LABELS[schedule]}>
+              {items.map((t) => (
+                <option key={t.code} value={t.code}>
+                  {t.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        <button className="btn-ghost" onClick={applyTaxToSelected} disabled={!selected.size || !bulkTaxCat || busy}>
+          Tag {selected.size}
+        </button>
+
         <button className="btn-ghost" onClick={approveSelected} disabled={!selected.size || busy}>
           <Check size={15} /> Approve {selected.size || ""}
         </button>
@@ -232,6 +281,23 @@ export default function ReviewQueue({ rows }: { rows: Txn[] }) {
                         <option key={c.name} value={c.name}>
                           {c.name}
                         </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select w-40 text-xs"
+                      value={t.tax_category ?? ""}
+                      onChange={(e) => setRowTaxCategory(t.id, e.target.value)}
+                      title="Tax category"
+                    >
+                      <option value="">Tax…</option>
+                      {TAX_BUCKETS.map(({ schedule, items: bucketItems }) => (
+                        <optgroup key={schedule} label={SCHEDULE_LABELS[schedule]}>
+                          {bucketItems.map((tc) => (
+                            <option key={tc.code} value={tc.code}>
+                              {tc.label}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                     <button

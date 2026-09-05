@@ -1,6 +1,13 @@
 import PeriodSelector from "@/components/PeriodSelector";
+import CategoryTrendChart from "@/components/CategoryTrendChart";
 import { StatCard, PageHeader } from "@/components/ui";
-import { getAvailablePeriods, fetchTypeTotals, fetchCategoryTotals, fetchSubCategoryTotals } from "@/lib/queries";
+import {
+  getAvailablePeriods,
+  fetchTypeTotals,
+  fetchCategoryTotals,
+  fetchSubCategoryTotals,
+  fetchCategoryMonthlyTrend,
+} from "@/lib/queries";
 import { parsePeriod, periodLabel, EXPENSE_TYPES } from "@/lib/fy";
 import { money, TYPE_COLORS } from "@/lib/format";
 import Link from "next/link";
@@ -10,7 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function OverviewPage({
   searchParams,
 }: {
-  searchParams: { period?: string; value?: string };
+  searchParams: { period?: string; value?: string; from?: string; to?: string };
 }) {
   const { years, fys } = await getAvailablePeriods();
 
@@ -21,11 +28,12 @@ export default async function OverviewPage({
       : searchParams;
   const period = parsePeriod(effective);
 
-  const [totals, categories, incomeSubs, transferSubs] = await Promise.all([
+  const [totals, categories, incomeSubs, transferSubs, trend] = await Promise.all([
     fetchTypeTotals(period),
     fetchCategoryTotals(period),
     fetchSubCategoryTotals("income", period),
     fetchSubCategoryTotals("transfers", period),
+    fetchCategoryMonthlyTrend(period),
   ]);
 
   const income = totals.income ?? 0;
@@ -35,6 +43,8 @@ export default async function OverviewPage({
   const periodParams: Record<string, string> = {};
   if (effective.period) periodParams.period = effective.period;
   if (effective.value) periodParams.value = effective.value;
+  if (effective.from) periodParams.from = effective.from;
+  if (effective.to) periodParams.to = effective.to;
   const incomeHref = (name: string) =>
     `/reclassify?${new URLSearchParams({ type: "income", sub_category: name, ...periodParams })}`;
   const expenseHref = (name: string) =>
@@ -109,6 +119,14 @@ export default async function OverviewPage({
           value={money(net, { sign: true })}
           accent={net >= 0 ? TYPE_COLORS.income : TYPE_COLORS.spending}
         />
+      </div>
+
+      <div className="card p-5">
+        <div className="mb-4 flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold">Category trend</h2>
+          <span className="text-xs text-gray-400">{periodLabel(period)}, by month</span>
+        </div>
+        <CategoryTrendChart categories={trend.categories} series={trend.series} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function CategoriesPage({
   searchParams,
 }: {
-  searchParams: { period?: string; value?: string };
+  searchParams: { period?: string; value?: string; from?: string; to?: string };
 }) {
   const { years, fys } = await getAvailablePeriods();
 
@@ -43,6 +43,8 @@ export default async function CategoriesPage({
               href={`/transactions?${new URLSearchParams({
                 ...(searchParams.period ? { period: searchParams.period } : {}),
                 ...(searchParams.value ? { value: searchParams.value } : {}),
+                ...(searchParams.from ? { from: searchParams.from } : {}),
+                ...(searchParams.to ? { to: searchParams.to } : {}),
                 category: r.category,
               }).toString()}`}
               className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50"

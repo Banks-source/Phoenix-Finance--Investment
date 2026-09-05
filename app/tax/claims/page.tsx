@@ -17,7 +17,7 @@ const OWNERS = [
 export default async function ClaimsPage({
   searchParams,
 }: {
-  searchParams: { period?: string; value?: string; owner?: string; all?: string };
+  searchParams: { period?: string; value?: string; from?: string; to?: string; owner?: string; all?: string };
 }) {
   const { years, fys } = await getAvailablePeriods();
 
@@ -40,6 +40,8 @@ export default async function ClaimsPage({
     const p = new URLSearchParams();
     if (effective.period) p.set("period", effective.period);
     if (effective.value) p.set("value", String(effective.value));
+    if (effective.from) p.set("from", effective.from);
+    if (effective.to) p.set("to", effective.to);
     if (owner) p.set("owner", owner);
     if (showAll) p.set("all", "1");
     for (const [k, v] of Object.entries(patch)) {
