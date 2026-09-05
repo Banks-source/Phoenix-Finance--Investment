@@ -7,10 +7,10 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   // Run on all routes except static assets, the PWA manifest/icons, and
-  // /api/kubera/* — that route is hit by Vercel Cron (no session cookie
-  // exists for it) and enforces its own CRON_SECRET bearer-token check
-  // instead (see lib/cronAuth.ts).
+  // /api/kubera|redbark/* — those routes are hit by Vercel Cron (no session
+  // cookie exists for it) and enforce their own CRON_SECRET bearer-token
+  // check instead (see lib/cronAuth.ts).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.json|icons|api/kubera|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.json|icons|api/kubera|api/redbark|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

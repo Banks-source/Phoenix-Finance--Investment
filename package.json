@@ -12,7 +12,9 @@
     "backfill": "tsx scripts/backfill.ts",
     "analyse": "tsx scripts/analyse.ts",
     "validate": "tsx scripts/validate.ts",
-    "kubera:sync": "tsx scripts/kubera_sync.ts"
+    "kubera:sync": "tsx scripts/kubera_sync.ts",
+    "redbark:sync": "tsx scripts/redbark_sync.ts",
+    "redbark:accounts": "tsx scripts/redbark_accounts.ts"
   },
   "dependencies": {
     "next": "14.2.5",
