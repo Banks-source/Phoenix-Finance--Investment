@@ -15,7 +15,8 @@
     "kubera:sync": "tsx scripts/kubera_sync.ts",
     "redbark:sync": "tsx scripts/redbark_sync.ts",
     "redbark:accounts": "tsx scripts/redbark_accounts.ts",
-    "mcp:server": "tsx mcp-server/index.ts"
+    "mcp:server": "tsx mcp-server/index.ts",
+    "seed:portfolio-groups": "tsx scripts/seed_portfolio_groups.ts"
   },
   "dependencies": {
     "next": "14.2.5",

@@ -9,6 +9,7 @@ import {
   Receipt,
   Upload,
   FileText,
+  Wallet,
   LogOut,
   Flame,
 } from "lucide-react";
@@ -20,6 +21,7 @@ const tabs = [
   { href: "/review", label: "Review", icon: ListChecks },
   { href: "/import", label: "Import", icon: Upload },
   { href: "/tax", label: "Tax", icon: FileText },
+  { href: "/portfolio", label: "Portfolio", icon: Wallet },
 ];
 
 export default function Nav({ pending, email }: { pending: number; email?: string | null }) {
