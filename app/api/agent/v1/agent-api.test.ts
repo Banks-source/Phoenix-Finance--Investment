@@ -6,21 +6,42 @@ import { describe, it, expect, vi } from "vitest";
 // and asserts that directly, so adding a write handler to any of them fails
 // the suite rather than relying on someone remembering the rule.
 
+function chain(): any {
+  const resolved = Promise.resolve({ data: [], error: null });
+  const obj: any = {
+    select: () => obj,
+    eq: () => obj,
+    order: () => resolved,
+    maybeSingle: () => resolved,
+    then: resolved.then.bind(resolved),
+  };
+  return obj;
+}
+
 vi.mock("@/lib/supabase/server", () => ({
-  createServiceClient: () => ({
-    from: () => ({
-      select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }),
-    }),
-  }),
+  createServiceClient: () => ({ from: () => chain() }),
 }));
 vi.mock("@/lib/allocation", () => ({
-  fetchAllocationSummary: async () => ({ sleeves: [], propertyAud: 0, legacyAud: 0, investableTotalAud: 0, unmappedHoldings: [], legacyPositions: [] }),
+  fetchAllocationSummary: async () => ({
+    sleeves: [],
+    propertyAud: 0,
+    legacyAud: 0,
+    investableTotalAud: 0,
+    unmappedHoldings: [],
+    legacyPositions: [],
+    groupTotals: {
+      personal: { grossAud: 0, debtsAud: 0, netAud: 0 },
+      retirement: { grossAud: 0, debtsAud: 0, netAud: 0 },
+      ungrouped: { grossAud: 0, debtsAud: 0, netAud: 0 },
+    },
+  }),
   fetchNetWorthHistory: async () => [],
 }));
 vi.mock("@/lib/hardRules", () => ({
   evaluateAllHardRules: async () => [],
   HARD_RULES_VERSION: 1,
-  HARD_RULE_DEFINITIONS: [],
+  fetchHardRuleParams: async () => ({ btc_pct_of_nw_max: 40, single_asset_pct_max: 15, lvr_pct_max: 30, liquidity_months: 3 }),
+  getHardRuleDefinitions: () => [],
 }));
 vi.mock("@/lib/quarterlyReviewServer", () => ({
   fetchKillCriteriaStatus: async () => [],

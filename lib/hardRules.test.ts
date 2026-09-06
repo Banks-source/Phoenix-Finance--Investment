@@ -62,6 +62,16 @@ describe("evaluateRule2Concentration", () => {
     expect(r.status).toBe("fail");
     expect(r.reason).toContain("Apple Inc");
   });
+
+  it("uses editable thresholds instead of the hardcoded defaults when given", () => {
+    const assets = [{ name: "Bitcoin", ticker: "BTC", amountAud: 450 }]; // 45% of NW
+    // Fails against the default 40% limit...
+    expect(evaluateRule2Concentration(assets, 1000, 1000).status).toBe("fail");
+    // ...but passes against a custom, more permissive 50% limit.
+    const custom = evaluateRule2Concentration(assets, 1000, 1000, { btcPctOfNwMax: 50, singleAssetPctMax: 15 });
+    expect(custom.status).toBe("pass");
+    expect(custom.name).toContain("50%");
+  });
 });
 
 describe("evaluateRule3Leverage", () => {
@@ -91,6 +101,15 @@ describe("evaluateRule3Leverage", () => {
     expect(r.status).toBe("fail");
     expect(r.reason).toContain("Westpac");
   });
+
+  it("uses an editable LVR limit instead of the hardcoded default", () => {
+    const debts = [{ name: "18 Ashby Crt - ING", amountAud: 300000 }];
+    const properties = [{ name: "Ashby Crt", amountAud: 740000 }]; // ~40.5% LVR
+    expect(evaluateRule3Leverage(debts, properties).status).toBe("fail"); // over default 30%
+    const custom = evaluateRule3Leverage(debts, properties, 50);
+    expect(custom.status).toBe("pass"); // under a custom 50% limit
+    expect(custom.name).toContain("50%");
+  });
 });
 
 describe("evaluateRule4LiquidityFloor", () => {
@@ -107,6 +126,13 @@ describe("evaluateRule4LiquidityFloor", () => {
     const r = evaluateRule4LiquidityFloor(10000, 5000); // floor = 15000
     expect(r.status).toBe("fail");
     expect(r.reason).toMatch(/short of the \$15000/i);
+  });
+
+  it("uses an editable number of months instead of the hardcoded default", () => {
+    expect(evaluateRule4LiquidityFloor(10000, 5000).status).toBe("fail"); // default 3mo floor = 15000
+    const custom = evaluateRule4LiquidityFloor(10000, 5000, 1); // 1mo floor = 5000
+    expect(custom.status).toBe("pass");
+    expect(custom.name).toContain("1 months");
   });
 });
 

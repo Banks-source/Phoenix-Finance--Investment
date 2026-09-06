@@ -1,6 +1,28 @@
 import { fetchClassifiedHoldings, fetchAllocationSummary, fetchTotalNetWorthAud, fetchBtcQuantityHistory } from "@/lib/allocation";
 import { fetchAverageMonthlySpend } from "@/lib/queries";
 import { convert } from "@/lib/fx";
+import { createServiceClient } from "@/lib/supabase/server";
+
+// Default thresholds — used if hard_rule_params (editable, migration 0011)
+// is somehow missing a row. The live values normally come from that table.
+const DEFAULT_PARAMS = {
+  btc_pct_of_nw_max: 40,
+  single_asset_pct_max: 15,
+  lvr_pct_max: 30,
+  liquidity_months: 3,
+};
+
+export async function fetchHardRuleParams(): Promise<typeof DEFAULT_PARAMS> {
+  const supabase = createServiceClient();
+  const { data } = await supabase.from("hard_rule_params").select("param_key, value");
+  const byKey = new Map((data ?? []).map((r) => [r.param_key, Number(r.value)]));
+  return {
+    btc_pct_of_nw_max: byKey.get("btc_pct_of_nw_max") ?? DEFAULT_PARAMS.btc_pct_of_nw_max,
+    single_asset_pct_max: byKey.get("single_asset_pct_max") ?? DEFAULT_PARAMS.single_asset_pct_max,
+    lvr_pct_max: byKey.get("lvr_pct_max") ?? DEFAULT_PARAMS.lvr_pct_max,
+    liquidity_months: byKey.get("liquidity_months") ?? DEFAULT_PARAMS.liquidity_months,
+  };
+}
 
 const REPORTING_CURRENCY = "AUD";
 
@@ -17,14 +39,16 @@ const REPORTING_CURRENCY = "AUD";
 
 export const HARD_RULES_VERSION = 1;
 
-/** Static rule metadata (no evaluation) — for the /api/agent/v1/thesis endpoint. */
-export const HARD_RULE_DEFINITIONS = [
-  { rule: 1, name: "No co-invested illiquid deals" },
-  { rule: 2, name: "Concentration: BTC ≤40% NW, other single assets ≤15%" },
-  { rule: 3, name: "Leverage: PPR mortgage or ≤30% LVR income property only" },
-  { rule: 4, name: "Liquidity floor: 3 months expenses + credit line" },
-  { rule: 5, name: "Never sell BTC in a drawdown to fund spending" },
-] as const;
+/** Rule metadata with live thresholds baked into the name (no evaluation) — for /api/agent/v1/thesis and the thesis page. */
+export function getHardRuleDefinitions(params: typeof DEFAULT_PARAMS) {
+  return [
+    { rule: 1, name: "No co-invested illiquid deals" },
+    { rule: 2, name: `Concentration: BTC ≤${params.btc_pct_of_nw_max}% NW, other single assets ≤${params.single_asset_pct_max}%` },
+    { rule: 3, name: `Leverage: PPR mortgage or ≤${params.lvr_pct_max}% LVR income property only` },
+    { rule: 4, name: `Liquidity floor: ${params.liquidity_months} months expenses + credit line` },
+    { rule: 5, name: "Never sell BTC in a drawdown to fund spending" },
+  ] as const;
+}
 
 export type RuleStatus = "pass" | "fail" | "not_assessable";
 
@@ -85,22 +109,27 @@ function isBtc(a: { name: string; ticker?: string }): boolean {
 export function evaluateRule2Concentration(
   assets: ConcentrationAssetInput[],
   totalNetWorthAud: number,
-  investableTotalAud: number
+  investableTotalAud: number,
+  params: { btcPctOfNwMax: number; singleAssetPctMax: number } = {
+    btcPctOfNwMax: DEFAULT_PARAMS.btc_pct_of_nw_max,
+    singleAssetPctMax: DEFAULT_PARAMS.single_asset_pct_max,
+  }
 ): RuleResult {
+  const name = `Concentration: BTC ≤${params.btcPctOfNwMax}% NW, other single assets ≤${params.singleAssetPctMax}%`;
   if (totalNetWorthAud <= 0 || investableTotalAud <= 0) {
-    return result(2, "Concentration: BTC ≤40% NW, other single assets ≤15%", "not_assessable", "Net worth or investable total is zero or unavailable.");
+    return result(2, name, "not_assessable", "Net worth or investable total is zero or unavailable.");
   }
   const btcAud = assets.filter(isBtc).reduce((s, a) => s + a.amountAud, 0);
   const btcPct = (btcAud / totalNetWorthAud) * 100;
   const breaches: string[] = [];
-  if (btcPct > 40) breaches.push(`BTC is ${btcPct.toFixed(1)}% of total net worth (limit 40%)`);
+  if (btcPct > params.btcPctOfNwMax) breaches.push(`BTC is ${btcPct.toFixed(1)}% of total net worth (limit ${params.btcPctOfNwMax}%)`);
   for (const a of assets) {
     if (isBtc(a)) continue;
     const pct = (a.amountAud / investableTotalAud) * 100;
-    if (pct > 15) breaches.push(`${a.name} is ${pct.toFixed(1)}% of investable net worth (limit 15%)`);
+    if (pct > params.singleAssetPctMax) breaches.push(`${a.name} is ${pct.toFixed(1)}% of investable net worth (limit ${params.singleAssetPctMax}%)`);
   }
-  if (breaches.length === 0) return result(2, "Concentration: BTC ≤40% NW, other single assets ≤15%", "pass", "No concentration breach.");
-  return result(2, "Concentration: BTC ≤40% NW, other single assets ≤15%", "fail", breaches.join("; "));
+  if (breaches.length === 0) return result(2, name, "pass", "No concentration breach.");
+  return result(2, name, "fail", breaches.join("; "));
 }
 
 // ---- Rule 3: leverage ------------------------------------------------------
@@ -118,8 +147,6 @@ export interface PropertyAssetInput {
   amountAud: number;
 }
 
-const LVR_LIMIT_PCT = 30;
-
 function matchProperty(debtName: string, properties: PropertyAssetInput[]): PropertyAssetInput | undefined {
   const debtWords = debtName.toLowerCase();
   return properties.find((p) => {
@@ -128,49 +155,59 @@ function matchProperty(debtName: string, properties: PropertyAssetInput[]): Prop
   });
 }
 
-export function evaluateRule3Leverage(debts: DebtInput[], properties: PropertyAssetInput[]): RuleResult {
+export function evaluateRule3Leverage(
+  debts: DebtInput[],
+  properties: PropertyAssetInput[],
+  lvrPctMax: number = DEFAULT_PARAMS.lvr_pct_max
+): RuleResult {
+  const name = `Leverage: PPR mortgage or ≤${lvrPctMax}% LVR income property only`;
   const active = debts.filter((d) => d.amountAud > 0);
   if (active.length === 0) {
-    return result(3, "Leverage: PPR mortgage or ≤30% LVR income property only", "pass", "No active liabilities.");
+    return result(3, name, "pass", "No active liabilities.");
   }
   const issues: string[] = [];
   for (const d of active) {
     const match = matchProperty(d.name, properties);
     if (match && match.amountAud > 0) {
       const lvr = (d.amountAud / match.amountAud) * 100;
-      if (lvr > LVR_LIMIT_PCT) {
-        issues.push(`${d.name}: LVR ${lvr.toFixed(1)}% against ${match.name} (limit ${LVR_LIMIT_PCT}% for income property)`);
+      if (lvr > lvrPctMax) {
+        issues.push(`${d.name}: LVR ${lvr.toFixed(1)}% against ${match.name} (limit ${lvrPctMax}% for income property)`);
       }
     } else {
-      issues.push(`${d.name}: doesn't match an allowed liability type (PPR mortgage or ≤${LVR_LIMIT_PCT}% LVR income property)`);
+      issues.push(`${d.name}: doesn't match an allowed liability type (PPR mortgage or ≤${lvrPctMax}% LVR income property)`);
     }
   }
-  if (issues.length === 0) return result(3, "Leverage: PPR mortgage or ≤30% LVR income property only", "pass", "All active liabilities within the allowed shape.");
-  return result(3, "Leverage: PPR mortgage or ≤30% LVR income property only", "fail", issues.join("; "));
+  if (issues.length === 0) return result(3, name, "pass", "All active liabilities within the allowed shape.");
+  return result(3, name, "fail", issues.join("; "));
 }
 
 // ---- Rule 4: liquidity floor -----------------------------------------------
 // Cash+stables (the dry_powder sleeve total) vs 3× average monthly spend.
 // Now computed from real bank-feed data (fetchAverageMonthlySpend) rather
 // than the thesis's $250K/yr placeholder, now that Redbark/Kubera data exists.
-export function evaluateRule4LiquidityFloor(dryPowderAud: number, averageMonthlySpendAud: number): RuleResult {
+export function evaluateRule4LiquidityFloor(
+  dryPowderAud: number,
+  averageMonthlySpendAud: number,
+  liquidityMonths: number = DEFAULT_PARAMS.liquidity_months
+): RuleResult {
+  const name = `Liquidity floor: ${liquidityMonths} months expenses + credit line`;
   if (averageMonthlySpendAud <= 0) {
-    return result(4, "Liquidity floor: 3 months expenses + credit line", "not_assessable", "No spend data available to compute the floor.");
+    return result(4, name, "not_assessable", "No spend data available to compute the floor.");
   }
-  const floor = averageMonthlySpendAud * 3;
+  const floor = averageMonthlySpendAud * liquidityMonths;
   if (dryPowderAud >= floor) {
     return result(
       4,
-      "Liquidity floor: 3 months expenses + credit line",
+      name,
       "pass",
-      `Dry powder $${dryPowderAud.toFixed(0)} covers the $${floor.toFixed(0)} floor (3× $${averageMonthlySpendAud.toFixed(0)}/mo).`
+      `Dry powder $${dryPowderAud.toFixed(0)} covers the $${floor.toFixed(0)} floor (${liquidityMonths}× $${averageMonthlySpendAud.toFixed(0)}/mo).`
     );
   }
   return result(
     4,
-    "Liquidity floor: 3 months expenses + credit line",
+    name,
     "fail",
-    `Dry powder $${dryPowderAud.toFixed(0)} is short of the $${floor.toFixed(0)} floor (3× $${averageMonthlySpendAud.toFixed(0)}/mo) by $${(floor - dryPowderAud).toFixed(0)}.`
+    `Dry powder $${dryPowderAud.toFixed(0)} is short of the $${floor.toFixed(0)} floor (${liquidityMonths}× $${averageMonthlySpendAud.toFixed(0)}/mo) by $${(floor - dryPowderAud).toFixed(0)}.`
   );
 }
 
@@ -209,12 +246,13 @@ export function evaluateRule5BtcSaleCheck(history: BtcQuantityPoint[]): RuleResu
 
 // ---- Orchestrator: fetch real data, evaluate all 5 ------------------------
 export async function evaluateAllHardRules(): Promise<RuleResult[]> {
-  const [holdings, summary, totalNetWorthAud, averageMonthlySpendAud, btcHistory] = await Promise.all([
+  const [holdings, summary, totalNetWorthAud, averageMonthlySpendAud, btcHistory, params] = await Promise.all([
     fetchClassifiedHoldings(),
     fetchAllocationSummary(),
     fetchTotalNetWorthAud(),
     fetchAverageMonthlySpend(3),
     fetchBtcQuantityHistory(),
+    fetchHardRuleParams(),
   ]);
 
   const assets = holdings.filter((h) => !h.isDebt);
@@ -235,9 +273,12 @@ export async function evaluateAllHardRules(): Promise<RuleResult[]> {
     evaluateRule1NoCoInvestedIlliquid(
       summary.legacyPositions.map((p) => ({ name: p.name, breachedRule: p.breachedRule, decision: p.decision }))
     ),
-    evaluateRule2Concentration(concentrationAssets, totalNetWorthAud, summary.investableTotalAud),
-    evaluateRule3Leverage(debtInputs, properties),
-    evaluateRule4LiquidityFloor(dryPowderTotal, averageMonthlySpendAud),
+    evaluateRule2Concentration(concentrationAssets, totalNetWorthAud, summary.investableTotalAud, {
+      btcPctOfNwMax: params.btc_pct_of_nw_max,
+      singleAssetPctMax: params.single_asset_pct_max,
+    }),
+    evaluateRule3Leverage(debtInputs, properties, params.lvr_pct_max),
+    evaluateRule4LiquidityFloor(dryPowderTotal, averageMonthlySpendAud, params.liquidity_months),
     evaluateRule5BtcSaleCheck(btcHistory),
   ];
 }
