@@ -1,11 +1,16 @@
 /**
- * One-time seed: maps each known Kubera portfolio to personal/retirement,
- * and flags the biofuels holding as legacy (SOLUTION_DESIGN.md §9.2 already
- * calls this one out by name). Safe to re-run — upserts on conflict.
+ * One-time seed for the thesis engine (#4, #5, #8):
+ *   - portfolio_groups: maps each known Kubera portfolio to personal/retirement
+ *   - legacy_positions: flags the biofuels holding (docs/backlog-v2.5-data-layer.md
+ *     names it explicitly as breaching hard rule 1 — illiquid + co-invested)
+ *   - sleeve_targets: seeds the real thesis bands (same doc), left editable
+ *     in the /portfolio dashboard afterward
+ * Safe to re-run — everything upserts on conflict.
  *
  * Usage: NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npm run seed:portfolio-groups
  */
 import { createServiceClient } from "../lib/supabase/server";
+import { THESIS_SLEEVES, THESIS_DEFAULT_BANDS } from "../lib/sleeves";
 
 async function main() {
   const supabase = createServiceClient();
@@ -21,46 +26,55 @@ async function main() {
     if (!seenPortfolios.has(s.kubera_portfolio_id)) seenPortfolios.set(s.kubera_portfolio_id, s.portfolio_name);
   }
 
+  if (seenPortfolios.size === 0) {
+    console.log("No portfolios found in portfolio_snapshots yet — run a Kubera sync first.");
+    return;
+  }
+
+  // 1. portfolio_groups
   const groups = [...seenPortfolios.entries()].map(([kubera_portfolio_id, portfolio_name]) => ({
     kubera_portfolio_id,
     portfolio_name,
     group_name: portfolio_name === "SMSF" ? "retirement" : "personal",
     note: "seeded by scripts/seed_portfolio_groups.ts",
   }));
-
-  if (groups.length === 0) {
-    console.log("No portfolios found in portfolio_snapshots yet — run a Kubera sync first.");
-    return;
-  }
-
-  const { error: groupsError } = await supabase
-    .from("portfolio_groups")
-    .upsert(groups, { onConflict: "kubera_portfolio_id" });
+  const { error: groupsError } = await supabase.from("portfolio_groups").upsert(groups, { onConflict: "kubera_portfolio_id" });
   if (groupsError) throw groupsError;
   console.log(`portfolio_groups: ${groups.map((g) => `${g.portfolio_name} -> ${g.group_name}`).join(", ")}`);
 
-  // Flag biofuels as legacy in whichever portfolio it's actually in.
-  const overrides: { kubera_portfolio_id: string; asset_id: string; asset_name: string; sleeve: string; note: string }[] = [];
+  // 2. legacy_positions — biofuels, seeded as the first entry per #8's acceptance criteria.
+  const reviewDate = new Date();
+  reviewDate.setDate(reviewDate.getDate() + 90);
+  const legacyRows: { kubera_portfolio_id: string; asset_id: string; asset_name: string; reason: string; breached_rule: number; review_date: string }[] = [];
   for (const s of snapshots ?? []) {
     for (const a of (s.assets as { id: string; name: string }[]) ?? []) {
       if (/biofuels/i.test(a.name)) {
-        overrides.push({
+        legacyRows.push({
           kubera_portfolio_id: s.kubera_portfolio_id,
           asset_id: a.id,
           asset_name: a.name,
-          sleeve: "legacy",
-          note: "Flagged in SOLUTION_DESIGN.md §9.2 as a legacy holding that breaches the thesis",
+          reason: "Illiquid and co-invested — breaches hard rule 1. Predates the thesis. Exit path is an advisor-meeting agenda item.",
+          breached_rule: 1,
+          review_date: reviewDate.toISOString().slice(0, 10),
         });
       }
     }
   }
-  if (overrides.length > 0) {
-    const { error: overridesError } = await supabase
-      .from("sleeve_overrides")
-      .upsert(overrides, { onConflict: "kubera_portfolio_id,asset_id" });
-    if (overridesError) throw overridesError;
-    console.log(`sleeve_overrides: flagged ${overrides.length} biofuels holding(s) as legacy`);
+  if (legacyRows.length > 0) {
+    const { error: legacyError } = await supabase.from("legacy_positions").upsert(legacyRows, { onConflict: "kubera_portfolio_id,asset_id" });
+    if (legacyError) throw legacyError;
+    console.log(`legacy_positions: flagged ${legacyRows.length} biofuels holding(s), review by ${legacyRows[0].review_date}`);
   }
+
+  // 3. sleeve_targets — the thesis's real bands.
+  const targetRows = THESIS_SLEEVES.map((sleeve) => ({
+    sleeve,
+    min_pct: THESIS_DEFAULT_BANDS[sleeve].min,
+    max_pct: THESIS_DEFAULT_BANDS[sleeve].max,
+  }));
+  const { error: targetsError } = await supabase.from("sleeve_targets").upsert(targetRows, { onConflict: "sleeve" });
+  if (targetsError) throw targetsError;
+  console.log(`sleeve_targets: seeded ${targetRows.length} bands from the thesis doc`);
 }
 
 main().catch((e) => {

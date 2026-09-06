@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { PeriodFilter, periodBounds, periodsFromDates, fyRange, fyEndYearForDate } from "@/lib/fy";
+import { PeriodFilter, periodBounds, periodsFromDates, fyRange, fyEndYearForDate, EXPENSE_TYPES } from "@/lib/fy";
 import { TxnType } from "@/lib/taxonomy";
 import { CLAIM_CANDIDATE_CATEGORIES, categoryIsDeductibleLens } from "@/lib/taxcats";
 
@@ -116,6 +116,29 @@ export async function fetchTypeTotals(period?: PeriodFilter) {
     totals[r.type] = (totals[r.type] ?? 0) + Number(r.amount);
   }
   return totals;
+}
+
+/**
+ * Average monthly household spend over the trailing N full calendar months
+ * (approved transactions, EXPENSE_TYPES only — matches every other spend
+ * total in the app). Feeds hard rule 4's liquidity-floor denominator now
+ * that real bank-feed data exists (docs/backlog-v2.5-data-layer.md: "until
+ * that exists, use the thesis estimate" — it exists now).
+ */
+export async function fetchAverageMonthlySpend(months = 3): Promise<number> {
+  const to = new Date();
+  const from = new Date(to);
+  from.setMonth(from.getMonth() - months);
+  const fromIso = from.toISOString().slice(0, 10);
+  const toIso = to.toISOString().slice(0, 10);
+
+  const rows = await fetchAll<{ type: string; amount: number }>((c) =>
+    c.from("transactions").select("type, amount").eq("status", "approved").gte("date", fromIso).lte("date", toIso)
+  );
+  const total = rows
+    .filter((r) => (EXPENSE_TYPES as string[]).includes(r.type))
+    .reduce((s, r) => s + Math.abs(Number(r.amount)), 0);
+  return total / months;
 }
 
 /** Net by category for a period. */

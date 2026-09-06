@@ -33,6 +33,7 @@ beforeEach(() => {
     portfolio_groups: [],
     sleeve_overrides: [],
     sleeve_targets: [],
+    legacy_positions: [],
   };
 });
 
@@ -156,7 +157,16 @@ describe("fetchAllocationSummary", () => {
       { kubera_portfolio_id: "conn_smsf", group_name: "retirement" },
       { kubera_portfolio_id: "conn_lloyd", group_name: "personal" },
     ];
-    tableData.sleeve_overrides = [{ kubera_portfolio_id: "conn_smsf", asset_id: "s2", sleeve: "legacy" }];
+    tableData.legacy_positions = [
+      {
+        kubera_portfolio_id: "conn_smsf",
+        asset_id: "s2",
+        reason: "Illiquid and co-invested — breaches hard rule 1",
+        breached_rule: 1,
+        review_date: "2026-12-01",
+        decision: null,
+      },
+    ];
   }
 
   it("converts to AUD, splits crypto by group, and buckets property/legacy/unmapped correctly", async () => {
@@ -172,10 +182,12 @@ describe("fetchAllocationSummary", () => {
     expect(dryPowder.personalAud).toBe(300);
 
     expect(summary.propertyAud).toBe(700); // Ashby Crt
-    expect(summary.legacyAud).toBe(500 + 200); // Biofuels (override) + Goodman Group (unmapped)
-    expect(summary.unmappedHoldings.map((h) => h.assetId)).toEqual(["l3"]); // Goodman Group only — Biofuels has an override, not "unmapped"
+    expect(summary.legacyAud).toBe(500); // Biofuels only — it has a legacy_positions row
+    expect(summary.legacyPositions).toHaveLength(1);
+    expect(summary.legacyPositions[0]).toMatchObject({ assetId: "s2", reason: expect.stringContaining("Illiquid"), breachedRule: 1 });
+    expect(summary.unmappedHoldings.map((h) => h.assetId)).toEqual(["l3"]); // Goodman Group — genuinely unclassified, no sleeve and no legacy row
 
-    // investable total excludes debts: 1500 + 300 + 700 + 500 + 200 = 3200
+    // investable total excludes debts: 1500 (crypto) + 300 (dry powder) + 700 (property) + 500 (legacy) + 200 (unmapped) = 3200
     expect(summary.investableTotalAud).toBeCloseTo(3200, 6);
   });
 

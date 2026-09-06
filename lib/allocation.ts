@@ -10,6 +10,8 @@ export interface ClassifiedHolding {
   group: PortfolioGroupName | null; // null = portfolio has no portfolio_groups row yet
   assetId: string;
   name: string;
+  ticker?: string;
+  quantity?: number;
   sleeve: SleeveCode | null; // null = genuinely unmapped — needs a sleeve_overrides row
   method: "crypto_rule" | "cash_rule" | "property_rule" | "override" | "unmapped";
   currency: string;
@@ -19,6 +21,8 @@ export interface ClassifiedHolding {
 
 interface KuberaAssetRaw extends KuberaAssetLike {
   value?: { amount: number; currency: string };
+  ticker?: string;
+  quantity?: number;
 }
 
 /**
@@ -67,6 +71,8 @@ export async function fetchClassifiedHoldings(): Promise<ClassifiedHolding[]> {
         group,
         assetId: a.id,
         name: a.name,
+        ticker: a.ticker,
+        quantity: a.quantity,
         sleeve: classified.sleeve,
         method: classified.method,
         currency: a.value?.currency ?? "",
@@ -105,30 +111,47 @@ export interface SleeveAllocationRow {
   breach: "under" | "over" | null;
 }
 
+export interface LegacyPositionRow extends ClassifiedHolding {
+  amountAud: number;
+  reason: string;
+  breachedRule: number | null;
+  reviewDate: string;
+  decision: "exit" | "hold" | "reclassify" | null;
+}
+
 export interface AllocationSummary {
   sleeves: SleeveAllocationRow[]; // the 6 thesis sleeves only
   propertyAud: number;
-  legacyAud: number; // "legacy" override + anything still genuinely unmapped
+  legacyAud: number; // sum of confirmed legacy_positions rows (#8) — not the same as "unmapped"
   investableTotalAud: number; // sleeves + property + legacy — everything asset-side, no debts
-  unmappedHoldings: ClassifiedHolding[]; // sleeve === null, excludes debts — needs a sleeve_overrides row
+  unmappedHoldings: ClassifiedHolding[]; // sleeve === null AND no legacy_positions row — genuinely pending a decision
+  legacyPositions: LegacyPositionRow[]; // holdings explicitly flagged as breaching the thesis, with reason/decision
 }
 
 /**
  * Aggregates fetchClassifiedHoldings() into $ and % by sleeve, converted to
  * AUD (Kubera reports each holding in its own native currency), against
- * whatever target bands exist in sleeve_targets (empty by default — same
- * "no targets set" pattern as `budgets`). Percentages are of total
- * investable assets (sleeves + property + legacy combined), so an
+ * whatever target bands exist in sleeve_targets (seeded from the thesis
+ * doc's bands, but editable if the thesis changes). Percentages are of
+ * total investable assets (sleeves + property + legacy combined), so an
  * over-allocation to property or an unreviewed legacy pile is visible as
  * "missing" from the 6 sleeves, not hidden by excluding it from the base.
+ *
+ * A holding counts as "legacy" only if it has an explicit legacy_positions
+ * row (#8) — a required reason + review date, never inferred. A holding
+ * with no sleeve and no legacy row is "unmapped": still pending either a
+ * sleeve assignment or a legacy decision, shown separately so the two
+ * don't get conflated.
  */
 export async function fetchAllocationSummary(): Promise<AllocationSummary> {
   const supabase = createServiceClient();
-  const [holdings, { data: targets }] = await Promise.all([
+  const [holdings, { data: targets }, { data: legacyRows }] = await Promise.all([
     fetchClassifiedHoldings(),
     supabase.from("sleeve_targets").select("sleeve, min_pct, max_pct"),
+    supabase.from("legacy_positions").select("kubera_portfolio_id, asset_id, reason, breached_rule, review_date, decision"),
   ]);
   const targetBySleeve = new Map((targets ?? []).map((t) => [t.sleeve, { min: Number(t.min_pct), max: Number(t.max_pct) }]));
+  const legacyByKey = new Map((legacyRows ?? []).map((l) => [`${l.kubera_portfolio_id}|${l.asset_id}`, l]));
 
   const assets = holdings.filter((h) => !h.isDebt);
   const audAmounts = await Promise.all(assets.map((h) => convert(h.amount, h.currency || REPORTING_CURRENCY, REPORTING_CURRENCY)));
@@ -136,15 +159,31 @@ export async function fetchAllocationSummary(): Promise<AllocationSummary> {
   const bySleeve = new Map<SleeveCode, { personal: number; retirement: number }>();
   let propertyAud = 0;
   let legacyAud = 0;
+  let unmappedTotalAud = 0;
   const unmappedHoldings: ClassifiedHolding[] = [];
+  const legacyPositions: LegacyPositionRow[] = [];
 
   assets.forEach((h, i) => {
     const aud = audAmounts[i];
-    if (h.sleeve === "property") {
-      propertyAud += aud;
-    } else if (h.sleeve === "legacy" || h.sleeve === null) {
+    const legacy = legacyByKey.get(`${h.portfolioId}|${h.assetId}`);
+    if (legacy) {
       legacyAud += aud;
-      if (h.sleeve === null) unmappedHoldings.push(h);
+      legacyPositions.push({
+        ...h,
+        amountAud: aud,
+        reason: legacy.reason,
+        breachedRule: legacy.breached_rule,
+        reviewDate: legacy.review_date,
+        decision: legacy.decision,
+      });
+    } else if (h.sleeve === "property") {
+      propertyAud += aud;
+    } else if (h.sleeve === null) {
+      // Real, held asset, just not classified yet — still counts toward the
+      // investable base (never silently dropped, per the docs), it's just
+      // not attributed to any of the 6 sleeves until reviewed.
+      unmappedTotalAud += aud;
+      unmappedHoldings.push(h);
     } else {
       const bucket = bySleeve.get(h.sleeve) ?? { personal: 0, retirement: 0 };
       if (h.group === "retirement") bucket.retirement += aud;
@@ -157,7 +196,8 @@ export async function fetchAllocationSummary(): Promise<AllocationSummary> {
     const b = bySleeve.get(s) ?? { personal: 0, retirement: 0 };
     return b.personal + b.retirement;
   };
-  const investableTotalAud = THESIS_SLEEVES.reduce((sum, s) => sum + sleeveTotal(s), 0) + propertyAud + legacyAud;
+  const investableTotalAud =
+    THESIS_SLEEVES.reduce((sum, s) => sum + sleeveTotal(s), 0) + propertyAud + legacyAud + unmappedTotalAud;
 
   const sleeves: SleeveAllocationRow[] = THESIS_SLEEVES.map((sleeve) => {
     const b = bySleeve.get(sleeve) ?? { personal: 0, retirement: 0 };
@@ -181,5 +221,46 @@ export async function fetchAllocationSummary(): Promise<AllocationSummary> {
     };
   });
 
-  return { sleeves, propertyAud, legacyAud, investableTotalAud, unmappedHoldings };
+  return { sleeves, propertyAud, legacyAud, investableTotalAud, unmappedHoldings, legacyPositions };
+}
+
+/** Total net worth across every portfolio's latest snapshot, converted to AUD. */
+export async function fetchTotalNetWorthAud(): Promise<number> {
+  const supabase = createServiceClient();
+  const { data: snapshots } = await supabase
+    .from("portfolio_snapshots")
+    .select("kubera_portfolio_id, net_worth, currency, synced_at")
+    .order("synced_at", { ascending: false });
+
+  const latestByPortfolio = new Map<string, { net_worth: number; currency: string }>();
+  for (const s of snapshots ?? []) {
+    if (!latestByPortfolio.has(s.kubera_portfolio_id)) {
+      latestByPortfolio.set(s.kubera_portfolio_id, { net_worth: s.net_worth, currency: s.currency });
+    }
+  }
+
+  const amounts = await Promise.all(
+    [...latestByPortfolio.values()].map((p) => convert(p.net_worth, p.currency || REPORTING_CURRENCY, REPORTING_CURRENCY))
+  );
+  return amounts.reduce((sum, a) => sum + a, 0);
+}
+
+const BTC_TICKER_OR_NAME = /bitcoin/i;
+
+/** Total BTC quantity per snapshot sync (summed across every portfolio), for rule 5. */
+export async function fetchBtcQuantityHistory(): Promise<{ syncedAt: string; quantity: number }[]> {
+  const supabase = createServiceClient();
+  const { data: snapshots } = await supabase.from("portfolio_snapshots").select("synced_at, assets");
+
+  const byTimestamp = new Map<string, number>();
+  for (const s of snapshots ?? []) {
+    let total = byTimestamp.get(s.synced_at) ?? 0;
+    for (const a of (s.assets as { name: string; ticker?: string; quantity?: number }[]) ?? []) {
+      const isBtcAsset = a.ticker?.toUpperCase() === "BTC" || BTC_TICKER_OR_NAME.test(a.name);
+      if (isBtcAsset && typeof a.quantity === "number") total += a.quantity;
+    }
+    byTimestamp.set(s.synced_at, total);
+  }
+
+  return [...byTimestamp.entries()].map(([syncedAt, quantity]) => ({ syncedAt, quantity }));
 }

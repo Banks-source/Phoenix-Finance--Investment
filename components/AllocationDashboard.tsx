@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AllocationSummary } from "@/lib/allocation";
-import { SLEEVE_LABELS, SleeveCode } from "@/lib/sleeves";
+import { SLEEVE_LABELS } from "@/lib/sleeves";
 import { money } from "@/lib/format";
 import { AlertTriangle } from "lucide-react";
 
@@ -74,10 +74,13 @@ function UnmappedRow({
   holding: AllocationSummary["unmappedHoldings"][number];
   onSaved: () => void;
 }) {
+  const [mode, setMode] = useState<"sleeve" | "legacy" | null>(null);
   const [sleeve, setSleeve] = useState("");
+  const [reason, setReason] = useState("");
+  const [reviewDate, setReviewDate] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function assign() {
+  async function assignSleeve() {
     if (!sleeve) return;
     setBusy(true);
     await post("/api/sleeve-overrides", {
@@ -90,24 +93,124 @@ function UnmappedRow({
     onSaved();
   }
 
+  async function flagLegacy() {
+    if (!reason || !reviewDate) return;
+    setBusy(true);
+    await post("/api/legacy-positions", {
+      kubera_portfolio_id: holding.portfolioId,
+      asset_id: holding.assetId,
+      asset_name: holding.name,
+      reason,
+      review_date: reviewDate,
+    });
+    setBusy(false);
+    onSaved();
+  }
+
   return (
-    <div className="flex items-center gap-3 py-2 text-sm">
-      <span className="min-w-0 flex-1 truncate">{holding.name}</span>
-      <span className="text-xs text-gray-400">{holding.portfolioName}</span>
-      <span className="tabular w-24 text-right">
-        {holding.amount.toLocaleString()} {holding.currency}
-      </span>
-      <select className="select w-40 text-xs" value={sleeve} onChange={(e) => setSleeve(e.target.value)}>
-        <option value="">Assign sleeve…</option>
-        {Object.entries(SLEEVE_LABELS).map(([code, label]) => (
-          <option key={code} value={code}>
-            {label}
-          </option>
-        ))}
-      </select>
-      <button className="btn-primary !px-2.5 !py-1" onClick={assign} disabled={!sleeve || busy}>
-        Save
-      </button>
+    <div className="py-2 text-sm">
+      <div className="flex items-center gap-3">
+        <span className="min-w-0 flex-1 truncate">{holding.name}</span>
+        <span className="text-xs text-gray-400">{holding.portfolioName}</span>
+        <span className="tabular w-24 text-right">
+          {holding.amount.toLocaleString()} {holding.currency}
+        </span>
+        {mode === null && (
+          <>
+            <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => setMode("sleeve")}>
+              Assign sleeve
+            </button>
+            <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => setMode("legacy")}>
+              Flag as legacy
+            </button>
+          </>
+        )}
+      </div>
+      {mode === "sleeve" && (
+        <div className="mt-1.5 flex items-center gap-2">
+          <select className="select w-40 text-xs" value={sleeve} onChange={(e) => setSleeve(e.target.value)}>
+            <option value="">Choose sleeve…</option>
+            {Object.entries(SLEEVE_LABELS).map(([code, label]) => (
+              <option key={code} value={code}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <button className="btn-primary !px-2.5 !py-1" onClick={assignSleeve} disabled={!sleeve || busy}>
+            Save
+          </button>
+          <button className="btn-ghost !px-2 !py-1" onClick={() => setMode(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {mode === "legacy" && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <input
+            className="input flex-1 text-xs"
+            placeholder="Reason this breaches the thesis…"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <input type="date" className="input !w-auto text-xs" value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} />
+          <button className="btn-primary !px-2.5 !py-1" onClick={flagLegacy} disabled={!reason || !reviewDate || busy}>
+            Flag
+          </button>
+          <button className="btn-ghost !px-2 !py-1" onClick={() => setMode(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LegacyPositionRow({
+  position,
+  onSaved,
+}: {
+  position: AllocationSummary["legacyPositions"][number];
+  onSaved: () => void;
+}) {
+  const [decision, setDecision] = useState(position.decision ?? "");
+  const [busy, setBusy] = useState(false);
+
+  async function saveDecision(next: string) {
+    setDecision(next);
+    if (!next) return;
+    setBusy(true);
+    await post("/api/legacy-positions", {
+      kubera_portfolio_id: position.portfolioId,
+      asset_id: position.assetId,
+      decision: next,
+    });
+    setBusy(false);
+    onSaved();
+  }
+
+  return (
+    <div className="py-2.5 text-sm">
+      <div className="flex items-center gap-3">
+        <span className="min-w-0 flex-1 truncate font-medium">{position.name}</span>
+        <span className="text-xs text-gray-400">{position.portfolioName}</span>
+        <span className="tabular w-28 text-right">{money(position.amountAud)}</span>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+        <span>{position.reason}</span>
+        {position.breachedRule != null && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-rose-700">breaches rule {position.breachedRule}</span>}
+        <span>Review by {position.reviewDate}</span>
+        <select
+          className="select ml-auto !py-0.5 text-xs"
+          value={decision}
+          onChange={(e) => saveDecision(e.target.value)}
+          disabled={busy}
+        >
+          <option value="">Decision…</option>
+          <option value="exit">Exit</option>
+          <option value="hold">Hold</option>
+          <option value="reclassify">Reclassify</option>
+        </select>
+      </div>
     </div>
   );
 }
@@ -131,16 +234,27 @@ export default function AllocationDashboard({ summary }: { summary: AllocationSu
           <p className="mt-1 text-xs text-gray-400">Outside the thesis sleeves — tracked separately.</p>
         </div>
         <div className="card p-5">
-          <div className="text-sm font-semibold">Legacy / unmapped</div>
+          <div className="text-sm font-semibold">Legacy (flagged)</div>
           <div className="mt-1 text-2xl font-semibold tabular">{money(summary.legacyAud)}</div>
-          <p className="mt-1 text-xs text-gray-400">Flagged (e.g. biofuels) or not yet reviewed — see below.</p>
+          <p className="mt-1 text-xs text-gray-400">Confirmed breaches of the thesis, each with a reason and review date.</p>
         </div>
       </div>
+
+      {summary.legacyPositions.length > 0 && (
+        <div className="card p-5">
+          <div className="mb-2 text-sm font-semibold">Legacy positions — need an exit/hold/reclassify decision</div>
+          <div className="divide-y divide-gray-100">
+            {summary.legacyPositions.map((p) => (
+              <LegacyPositionRow key={`${p.portfolioId}-${p.assetId}`} position={p} onSaved={refresh} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {summary.unmappedHoldings.length > 0 && (
         <div className="card p-5">
           <div className="mb-2 text-sm font-semibold">
-            {summary.unmappedHoldings.length} holding{summary.unmappedHoldings.length === 1 ? "" : "s"} need a sleeve assigned
+            {summary.unmappedHoldings.length} holding{summary.unmappedHoldings.length === 1 ? "" : "s"} not yet classified
           </div>
           <div className="divide-y divide-gray-100">
             {summary.unmappedHoldings.map((h) => (
@@ -151,8 +265,8 @@ export default function AllocationDashboard({ summary }: { summary: AllocationSu
       )}
 
       <p className="text-xs text-gray-400">
-        Investable total (sleeves + property + legacy, excludes debts): {money(summary.investableTotalAud)}. Nothing
-        here executes a trade — signals only.
+        Investable total (sleeves + property + legacy + unclassified, excludes debts): {money(summary.investableTotalAud)}.
+        Nothing here executes a trade — signals only.
       </p>
     </div>
   );
