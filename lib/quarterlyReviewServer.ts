@@ -112,3 +112,25 @@ export async function fetchReviewHistory(): Promise<QuarterlyReviewRecord[]> {
     archived: r.archived,
   }));
 }
+
+/**
+ * Current status of every kill criterion — from the most recently
+ * *completed* review if one exists, otherwise the live template list, all
+ * "not_assessed" (nothing scanned yet). For /api/agent/v1/kill-criteria.
+ */
+export async function fetchKillCriteriaStatus(): Promise<KillCriterionAnswer[]> {
+  await ensureKillCriteriaTemplatesSeeded();
+  const supabase = createServiceClient();
+
+  const { data: lastCompleted } = await supabase
+    .from("quarterly_reviews")
+    .select("kill_criteria")
+    .not("completed_at", "is", null)
+    .order("completed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (lastCompleted) return lastCompleted.kill_criteria as KillCriterionAnswer[];
+
+  const { data: templates } = await supabase.from("kill_criteria_templates").select("text").order("sort_order", { ascending: true });
+  return (templates ?? []).map((t) => ({ text: t.text, status: "not_assessed" as const, note: "" }));
+}

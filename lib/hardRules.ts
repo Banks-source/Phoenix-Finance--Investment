@@ -17,6 +17,15 @@ const REPORTING_CURRENCY = "AUD";
 
 export const HARD_RULES_VERSION = 1;
 
+/** Static rule metadata (no evaluation) — for the /api/agent/v1/thesis endpoint. */
+export const HARD_RULE_DEFINITIONS = [
+  { rule: 1, name: "No co-invested illiquid deals" },
+  { rule: 2, name: "Concentration: BTC ≤40% NW, other single assets ≤15%" },
+  { rule: 3, name: "Leverage: PPR mortgage or ≤30% LVR income property only" },
+  { rule: 4, name: "Liquidity floor: 3 months expenses + credit line" },
+  { rule: 5, name: "Never sell BTC in a drawdown to fund spending" },
+] as const;
+
 export type RuleStatus = "pass" | "fail" | "not_assessable";
 
 export interface RuleResult {

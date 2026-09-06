@@ -264,3 +264,26 @@ export async function fetchBtcQuantityHistory(): Promise<{ syncedAt: string; qua
 
   return [...byTimestamp.entries()].map(([syncedAt, quantity]) => ({ syncedAt, quantity }));
 }
+
+/** Net-worth time series (summed across every portfolio per sync, converted to AUD), optionally bounded by date. */
+export async function fetchNetWorthHistory(from?: string, to?: string): Promise<{ syncedAt: string; netWorthAud: number }[]> {
+  const supabase = createServiceClient();
+  let q = supabase.from("portfolio_snapshots").select("synced_at, net_worth, currency").order("synced_at", { ascending: true });
+  if (from) q = q.gte("synced_at", from);
+  if (to) q = q.lte("synced_at", to);
+  const { data } = await q;
+
+  const byTimestamp = new Map<string, { net_worth: number; currency: string }[]>();
+  for (const s of data ?? []) {
+    const list = byTimestamp.get(s.synced_at) ?? [];
+    list.push({ net_worth: s.net_worth, currency: s.currency });
+    byTimestamp.set(s.synced_at, list);
+  }
+
+  const out: { syncedAt: string; netWorthAud: number }[] = [];
+  for (const [syncedAt, rows] of byTimestamp) {
+    const amounts = await Promise.all(rows.map((r) => convert(r.net_worth, r.currency || REPORTING_CURRENCY, REPORTING_CURRENCY)));
+    out.push({ syncedAt, netWorthAud: amounts.reduce((s, a) => s + a, 0) });
+  }
+  return out.sort((a, b) => a.syncedAt.localeCompare(b.syncedAt));
+}
