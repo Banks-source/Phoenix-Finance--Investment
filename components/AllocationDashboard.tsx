@@ -221,6 +221,25 @@ export default function AllocationDashboard({ summary }: { summary: AllocationSu
 
   return (
     <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="card p-5">
+          <div className="text-sm font-semibold">Personal</div>
+          <div className="mt-1 text-2xl font-semibold tabular">{money(summary.groupTotals.personal.netAud)}</div>
+          <p className="mt-1 text-xs text-gray-400">
+            {money(summary.groupTotals.personal.grossAud)} gross
+            {summary.groupTotals.personal.debtsAud > 0 && ` − ${money(summary.groupTotals.personal.debtsAud)} debts`}
+          </p>
+        </div>
+        <div className="card p-5">
+          <div className="text-sm font-semibold">Super / SMSF</div>
+          <div className="mt-1 text-2xl font-semibold tabular">{money(summary.groupTotals.retirement.netAud)}</div>
+          <p className="mt-1 text-xs text-gray-400">
+            {money(summary.groupTotals.retirement.grossAud)} gross
+            {summary.groupTotals.retirement.debtsAud > 0 && ` − ${money(summary.groupTotals.retirement.debtsAud)} debts`}
+          </p>
+        </div>
+      </div>
+
       <div className="card divide-y divide-gray-100 p-5">
         {summary.sleeves.map((row) => (
           <SleeveRow key={row.sleeve} row={row} onSaved={refresh} />

@@ -189,6 +189,12 @@ describe("fetchAllocationSummary", () => {
 
     // investable total excludes debts: 1500 (crypto) + 300 (dry powder) + 700 (property) + 500 (legacy) + 200 (unmapped) = 3200
     expect(summary.investableTotalAud).toBeCloseTo(3200, 6);
+
+    // group totals: retirement (SMSF) = crypto 1500 + biofuels 500, no debts
+    expect(summary.groupTotals.retirement).toMatchObject({ grossAud: 2000, debtsAud: 0, netAud: 2000 });
+    // personal (Lloyd) = cash 300 + Ashby Crt 700 + Goodman 200 = 1200 gross, less the 999 loan
+    expect(summary.groupTotals.personal).toMatchObject({ grossAud: 1200, debtsAud: 999, netAud: 201 });
+    expect(summary.groupTotals.ungrouped).toMatchObject({ grossAud: 0, debtsAud: 0, netAud: 0 });
   });
 
   it("computes pctOfInvestable and leaves breach null when no target is set", async () => {

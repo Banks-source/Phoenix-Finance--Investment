@@ -119,6 +119,12 @@ export interface LegacyPositionRow extends ClassifiedHolding {
   decision: "exit" | "hold" | "reclassify" | null;
 }
 
+export interface GroupTotal {
+  grossAud: number; // every asset (sleeves + property + legacy + unmapped)
+  debtsAud: number;
+  netAud: number;
+}
+
 export interface AllocationSummary {
   sleeves: SleeveAllocationRow[]; // the 6 thesis sleeves only
   propertyAud: number;
@@ -126,6 +132,7 @@ export interface AllocationSummary {
   investableTotalAud: number; // sleeves + property + legacy — everything asset-side, no debts
   unmappedHoldings: ClassifiedHolding[]; // sleeve === null AND no legacy_positions row — genuinely pending a decision
   legacyPositions: LegacyPositionRow[]; // holdings explicitly flagged as breaching the thesis, with reason/decision
+  groupTotals: { personal: GroupTotal; retirement: GroupTotal; ungrouped: GroupTotal };
 }
 
 /**
@@ -154,7 +161,24 @@ export async function fetchAllocationSummary(): Promise<AllocationSummary> {
   const legacyByKey = new Map((legacyRows ?? []).map((l) => [`${l.kubera_portfolio_id}|${l.asset_id}`, l]));
 
   const assets = holdings.filter((h) => !h.isDebt);
-  const audAmounts = await Promise.all(assets.map((h) => convert(h.amount, h.currency || REPORTING_CURRENCY, REPORTING_CURRENCY)));
+  const debts = holdings.filter((h) => h.isDebt);
+  const [audAmounts, debtAudAmounts] = await Promise.all([
+    Promise.all(assets.map((h) => convert(h.amount, h.currency || REPORTING_CURRENCY, REPORTING_CURRENCY))),
+    Promise.all(debts.map((h) => convert(h.amount, h.currency || REPORTING_CURRENCY, REPORTING_CURRENCY))),
+  ]);
+
+  const groupKey = (g: PortfolioGroupName | null): "personal" | "retirement" | "ungrouped" =>
+    g === "retirement" ? "retirement" : g === "personal" ? "personal" : "ungrouped";
+  const groupTotals = {
+    personal: { grossAud: 0, debtsAud: 0, netAud: 0 },
+    retirement: { grossAud: 0, debtsAud: 0, netAud: 0 },
+    ungrouped: { grossAud: 0, debtsAud: 0, netAud: 0 },
+  };
+  assets.forEach((h, i) => (groupTotals[groupKey(h.group)].grossAud += audAmounts[i]));
+  debts.forEach((h, i) => (groupTotals[groupKey(h.group)].debtsAud += debtAudAmounts[i]));
+  for (const key of ["personal", "retirement", "ungrouped"] as const) {
+    groupTotals[key].netAud = groupTotals[key].grossAud - groupTotals[key].debtsAud;
+  }
 
   const bySleeve = new Map<SleeveCode, { personal: number; retirement: number }>();
   let propertyAud = 0;
@@ -221,7 +245,7 @@ export async function fetchAllocationSummary(): Promise<AllocationSummary> {
     };
   });
 
-  return { sleeves, propertyAud, legacyAud, investableTotalAud, unmappedHoldings, legacyPositions };
+  return { sleeves, propertyAud, legacyAud, investableTotalAud, unmappedHoldings, legacyPositions, groupTotals };
 }
 
 /** Total net worth across every portfolio's latest snapshot, converted to AUD. */
