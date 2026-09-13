@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { listConnections, listAccounts, listTransactions, RedbarkAccount } from "@/lib/redbark";
+import { listConnections, listAccounts, listTransactions, getBalance, RedbarkAccount } from "@/lib/redbark";
 import { categoriseSync, MerchantRule } from "@/lib/categorise";
 import { classifyMoneyMovement, extractAccountDigits } from "@/lib/transferClassification";
 import { resolveIncomeSubCategory, Owner } from "@/lib/incomeClassification";
@@ -9,6 +9,7 @@ export type RedbarkSyncResult = {
   skippedDuplicates: number;
   unmappedAccounts: { id: string; name: string; institution: string }[];
   perAccount: { accountId: string; name: string; imported: number }[];
+  balanceErrors: { name: string; message: string }[];
 };
 
 const OVERLAP_DAYS = 3; // re-fetch a few days of overlap so a slow-settling transaction isn't missed
@@ -57,7 +58,13 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
     bankingAccounts.push(...(await listAccounts(conn.id)));
   }
 
-  const result: RedbarkSyncResult = { imported: 0, skippedDuplicates: 0, unmappedAccounts: [], perAccount: [] };
+  const result: RedbarkSyncResult = {
+    imported: 0,
+    skippedDuplicates: 0,
+    unmappedAccounts: [],
+    perAccount: [],
+    balanceErrors: [],
+  };
 
   for (const acct of bankingAccounts) {
     const owner = ownerMap.get(acct.id);
@@ -138,7 +145,32 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
       if (error) throw new Error(`transactions insert failed: ${error.message}`);
     }
 
-    await supabase.from("accounts").update({ redbark_last_synced_at: new Date().toISOString() }).eq("id", accountId);
+    // Live balance — kept on the account for the dashboard, plus a daily
+    // snapshot so balance history accumulates without a separate job. A
+    // balance failure shouldn't lose the transactions we just imported.
+    try {
+      const balance = await getBalance(acct.id);
+      const current = balance.current.amount / 100;
+      const available = balance.available ? balance.available.amount / 100 : null;
+      await supabase
+        .from("accounts")
+        .update({
+          redbark_last_synced_at: new Date().toISOString(),
+          balance_current: current,
+          balance_available: available,
+          balance_observed_at: balance.observed_at,
+        })
+        .eq("id", accountId);
+      await supabase
+        .from("balance_snapshots")
+        .upsert(
+          { account_id: accountId, observed_on: balance.observed_at.slice(0, 10), current, available },
+          { onConflict: "account_id,observed_on" }
+        );
+    } catch (err) {
+      result.balanceErrors.push({ name: acct.name, message: err instanceof Error ? err.message : "Unknown error" });
+      await supabase.from("accounts").update({ redbark_last_synced_at: new Date().toISOString() }).eq("id", accountId);
+    }
 
     result.imported += toInsert.length;
     result.perAccount.push({ accountId: acct.id, name: acct.name, imported: toInsert.length });

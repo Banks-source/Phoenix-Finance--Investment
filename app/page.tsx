@@ -1,6 +1,6 @@
 import PeriodSelector from "@/components/PeriodSelector";
 import CategoryTrendChart from "@/components/CategoryTrendChart";
-import { StatCard, PageHeader } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
 import {
   getAvailablePeriods,
   fetchTypeTotals,
@@ -8,6 +8,9 @@ import {
   fetchSubCategoryTotals,
   fetchCategoryMonthlyTrend,
 } from "@/lib/queries";
+import { fetchBalanceSummary } from "@/lib/balances";
+import { fetchCategoryBudgets, fetchMonthSpendByCategory, fetchYtdAverageByCategory } from "@/lib/budgets";
+import { CATEGORIES } from "@/lib/taxonomy";
 import { parsePeriod, periodLabel, EXPENSE_TYPES, DEFAULT_CALENDAR_YEAR } from "@/lib/fy";
 import { money, TYPE_COLORS } from "@/lib/format";
 import Link from "next/link";
@@ -21,22 +24,45 @@ export default async function OverviewPage({
 }) {
   const { years, fys } = await getAvailablePeriods();
 
-  // Default to the current calendar year if no period chosen.
   const effective = !searchParams.period ? { period: "year", value: String(DEFAULT_CALENDAR_YEAR) } : searchParams;
   const period = parsePeriod(effective);
 
-  const [totals, categories, incomeSubs, transferSubs, trend] = await Promise.all([
-    fetchTypeTotals(period),
-    fetchCategoryTotals(period),
-    fetchSubCategoryTotals("income", period),
-    fetchSubCategoryTotals("transfers", period),
-    fetchCategoryMonthlyTrend(period),
-  ]);
+  const today = new Date();
+  const [totals, categories, incomeSubs, transferSubs, trend, balances, budgets, monthSpend, ytdAverages] =
+    await Promise.all([
+      fetchTypeTotals(period),
+      fetchCategoryTotals(period),
+      fetchSubCategoryTotals("income", period),
+      fetchSubCategoryTotals("transfers", period),
+      fetchCategoryMonthlyTrend(period),
+      fetchBalanceSummary(),
+      fetchCategoryBudgets(),
+      fetchMonthSpendByCategory(today.getFullYear(), today.getMonth() + 1),
+      fetchYtdAverageByCategory(DEFAULT_CALENDAR_YEAR),
+    ]);
 
+  // ---- Budget position for the month in progress -------------------------
+  const expenseCategories = CATEGORIES.filter((c) => EXPENSE_TYPES.includes(c.type as (typeof EXPENSE_TYPES)[number]));
+  const budgetRows = expenseCategories
+    .map((c) => {
+      const target = budgets[c.name] ?? ytdAverages[c.name] ?? 0;
+      const spent = monthSpend[c.name] ?? 0;
+      return { category: c.name, target, spent, pct: target > 0 ? (spent / target) * 100 : 0 };
+    })
+    .filter((r) => r.target > 0 || r.spent > 0);
+
+  const budgetTotal = budgetRows.reduce((s, r) => s + r.target, 0);
+  const spentTotal = budgetRows.reduce((s, r) => s + r.spent, 0);
+  const budgetPct = budgetTotal > 0 ? Math.round((spentTotal / budgetTotal) * 100) : 0;
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const daysLeft = daysInMonth - today.getDate();
+  const monthName = today.toLocaleString(undefined, { month: "long" });
+  const attention = [...budgetRows].filter((r) => r.target > 0).sort((a, b) => b.pct - a.pct).slice(0, 4);
+
+  // ---- Period breakdowns (kept below the fold) ---------------------------
   const income = totals.income ?? 0;
   const expensesBase = EXPENSE_TYPES.reduce((s, t) => s + Math.abs(totals[t] ?? 0), 0);
 
-  // Preserve the current period on links to the Reclassify page.
   const periodParams: Record<string, string> = {};
   if (effective.period) periodParams.period = effective.period;
   if (effective.value) periodParams.value = effective.value;
@@ -44,40 +70,29 @@ export default async function OverviewPage({
   if (effective.to) periodParams.to = effective.to;
   const incomeHref = (name: string) =>
     `/reclassify?${new URLSearchParams({ type: "income", sub_category: name, ...periodParams })}`;
-  const expenseHref = (name: string) =>
-    `/reclassify?${new URLSearchParams({ category: name, ...periodParams })}`;
+  const expenseHref = (name: string) => `/reclassify?${new URLSearchParams({ category: name, ...periodParams })}`;
 
-  // Income broken down by sub-category (Lloyd/Milani salary, rent, taxes, …).
   const incomeCats = incomeSubs.map((s) => ({
     category: s.name,
-    net: s.net,
     count: s.count,
     abs: Math.abs(s.net),
     href: incomeHref(s.name),
     note: undefined as string | undefined,
   }));
-  // Ashby investment-loan costs are stored as transfers (isolated from household
-  // spending) but are real property expenses — surface them on the Overview so
-  // the expense side mirrors the rent income line.
   const propertyExpenses = transferSubs
     .filter((s) => s.name === "Ashby loan interest" || s.name === "Ashby loan fees")
     .map((s) => ({
       category: s.name,
-      net: s.net,
       count: s.count,
       abs: Math.abs(s.net),
       href: `/reclassify?${new URLSearchParams({ sub_category: s.name, ...periodParams })}`,
-      note:
-        s.name === "Ashby loan interest"
-          ? "Ashby investment-loan interest (deductible)"
-          : undefined,
+      note: s.name === "Ashby loan interest" ? "Ashby investment-loan interest (deductible)" : undefined,
     }));
   const expenseCats = [
     ...categories
       .filter((c) => EXPENSE_TYPES.includes(c.type as (typeof EXPENSE_TYPES)[number]))
       .map((c) => ({
         category: c.category,
-        net: c.net,
         count: c.count,
         abs: Math.abs(c.net),
         href: expenseHref(c.category),
@@ -90,20 +105,130 @@ export default async function OverviewPage({
   const net = income - expenses;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* ---- Money on hand ------------------------------------------------ */}
+      <section className="card overflow-hidden">
+        <div className="border-b bg-gradient-to-br from-indigo-600 to-indigo-700 px-5 py-5 text-white">
+          <div className="text-xs font-medium uppercase tracking-wide text-indigo-200">Available cash</div>
+          <div className="mt-1 text-3xl font-semibold tabular">{money(balances.cash)}</div>
+          {balances.debt > 0 && (
+            <div className="mt-1 text-sm text-indigo-100">
+              {money(balances.debt)} owed · {money(balances.net, { sign: true })} net
+            </div>
+          )}
+        </div>
+
+        {balances.accounts.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-gray-500">
+            No live balances yet — they arrive with the next bank sync.
+          </p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {balances.accounts.map((a) => (
+              <Link
+                key={a.id}
+                href={`/transactions?search=${encodeURIComponent(a.label)}`}
+                className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50"
+              >
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gray-100 text-xs font-semibold text-gray-500">
+                  {a.institution.slice(0, 2).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{a.label}</span>
+                  <span className="block truncate text-xs text-gray-400">
+                    {a.institution}
+                    {a.masked ? ` · ${a.masked}` : ""} · {a.owner}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className={`block tabular text-sm font-semibold ${a.current < 0 ? "text-rose-600" : ""}`}>
+                    {money(a.current)}
+                  </span>
+                  {a.available !== null && a.available !== a.current && (
+                    <span className="block text-[11px] text-gray-400">{money(a.available)} avail.</span>
+                  )}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ---- This month against budget ------------------------------------ */}
+      <section className="card p-5">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold">{monthName} budget</h2>
+          <Link href="/budget" className="text-xs text-indigo-600 hover:underline">
+            View all →
+          </Link>
+        </div>
+
+        <div className="mt-3 flex items-end justify-between">
+          <div>
+            <div className="text-2xl font-semibold tabular">{money(spentTotal)}</div>
+            <div className="text-xs text-gray-500">of {money(budgetTotal)} budgeted</div>
+          </div>
+          <div className="text-right">
+            <div className={`text-lg font-semibold tabular ${budgetPct > 100 ? "text-rose-600" : "text-gray-900"}`}>
+              {budgetPct}%
+            </div>
+            <div className="text-xs text-gray-500">{daysLeft} days left</div>
+          </div>
+        </div>
+
+        <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{
+              width: `${Math.min(100, budgetPct)}%`,
+              backgroundColor: budgetPct > 100 ? "#e11d48" : budgetPct > 85 ? "#d97706" : "#4f46e5",
+            }}
+          />
+        </div>
+
+        {attention.length > 0 && (
+          <div className="mt-4 space-y-2.5">
+            {attention.map((r) => {
+              const pct = Math.round(r.pct);
+              const over = pct > 100;
+              return (
+                <Link key={r.category} href="/budget" className="-mx-2 block rounded-md px-2 py-1 hover:bg-gray-50">
+                  <div className="flex items-baseline justify-between text-xs">
+                    <span className="font-medium text-gray-700">{r.category}</span>
+                    <span className={`tabular ${over ? "font-semibold text-rose-600" : "text-gray-500"}`}>
+                      {money(r.spent)} / {money(r.target)}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.min(100, pct)}%`,
+                        backgroundColor: over ? "#e11d48" : pct > 85 ? "#d97706" : "#818cf8",
+                      }}
+                    />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ---- Period detail ------------------------------------------------ */}
       <PageHeader
         title="Overview"
         subtitle={periodLabel(period)}
         actions={<PeriodSelector years={years} fys={fys} fallback={`year:${DEFAULT_CALENDAR_YEAR}`} />}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Income" value={money(income)} accent={TYPE_COLORS.income} />
-        <StatCard label="Expenses" value={money(expenses)} accent={TYPE_COLORS.spending} />
-        <StatCard
+      <div className="grid grid-cols-3 gap-3">
+        <MiniStat label="Income" value={money(income)} color={TYPE_COLORS.income} />
+        <MiniStat label="Expenses" value={money(expenses)} color={TYPE_COLORS.spending} />
+        <MiniStat
           label={net >= 0 ? "Surplus" : "Deficit"}
           value={money(net, { sign: true })}
-          accent={net >= 0 ? TYPE_COLORS.income : TYPE_COLORS.spending}
+          color={net >= 0 ? TYPE_COLORS.income : TYPE_COLORS.spending}
         />
       </div>
 
@@ -116,20 +241,19 @@ export default async function OverviewPage({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Breakdown
-          title="Income"
-          items={incomeCats}
-          total={income}
-          barColor={TYPE_COLORS.income}
-          emptyLabel="No income in this period"
-        />
-        <Breakdown
-          title="Expenses"
-          items={expenseCats}
-          total={expenses}
-          barColor={TYPE_COLORS.spending}
-          emptyLabel="No expenses in this period"
-        />
+        <Breakdown title="Income" items={incomeCats} total={income} barColor={TYPE_COLORS.income} emptyLabel="No income in this period" />
+        <Breakdown title="Expenses" items={expenseCats} total={expenses} barColor={TYPE_COLORS.spending} emptyLabel="No expenses in this period" />
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="card p-3">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="mt-0.5 truncate text-base font-semibold tabular" style={{ color }}>
+        {value}
       </div>
     </div>
   );
@@ -143,7 +267,7 @@ function Breakdown({
   emptyLabel,
 }: {
   title: string;
-  items: { category: string; net: number; count: number; abs: number; href: string; note?: string }[];
+  items: { category: string; count: number; abs: number; href: string; note?: string }[];
   total: number;
   barColor: string;
   emptyLabel: string;
@@ -162,11 +286,7 @@ function Breakdown({
           {items.map((i) => {
             const share = total > 0 ? Math.round((i.abs / total) * 100) : 0;
             return (
-              <Link
-                key={i.category}
-                href={i.href}
-                className="-mx-2 block rounded-md px-2 py-1 transition-colors hover:bg-gray-50"
-              >
+              <Link key={i.category} href={i.href} className="-mx-2 block rounded-md px-2 py-1 transition-colors hover:bg-gray-50">
                 <div className="mb-1 flex items-center justify-between text-sm">
                   <span className="flex items-center gap-2">
                     <span className="font-medium">{i.category}</span>
@@ -178,14 +298,9 @@ function Breakdown({
                   </span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${(i.abs / max) * 100}%`, backgroundColor: barColor }}
-                  />
+                  <div className="h-full rounded-full" style={{ width: `${(i.abs / max) * 100}%`, backgroundColor: barColor }} />
                 </div>
-                {i.note && (
-                  <p className="mt-1 text-xs italic text-amber-600">{i.note}</p>
-                )}
+                {i.note && <p className="mt-1 text-xs italic text-amber-600">{i.note}</p>}
               </Link>
             );
           })}

@@ -3,11 +3,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const listConnectionsMock = vi.fn();
 const listAccountsMock = vi.fn();
 const listTransactionsMock = vi.fn();
+const getBalanceMock = vi.fn();
 
 vi.mock("@/lib/redbark", () => ({
   listConnections: (...args: any[]) => listConnectionsMock(...args),
   listAccounts: (...args: any[]) => listAccountsMock(...args),
   listTransactions: (...args: any[]) => listTransactionsMock(...args),
+  getBalance: (...args: any[]) => getBalanceMock(...args),
 }));
 
 // In-memory fake covering exactly the call shapes redbarkSync.ts uses:
@@ -24,6 +26,7 @@ let state: {
   insertedTransactions: any[];
   insertedAccounts: any[];
   updatedAccounts: { id: string; redbark_last_synced_at: string }[];
+  balanceSnapshots: any[];
   transactionsInsertError: { message: string } | null;
 };
 
@@ -36,6 +39,7 @@ function resetState() {
     insertedTransactions: [],
     insertedAccounts: [],
     updatedAccounts: [],
+    balanceSnapshots: [],
     transactionsInsertError: null,
   };
 }
@@ -71,6 +75,10 @@ function fakeFrom(table: string) {
       chain.__updateRow = row;
       return chain;
     },
+    upsert: (row: any) => {
+      if (table === "balance_snapshots") state.balanceSnapshots.push(row);
+      return Promise.resolve({ error: null });
+    },
     range: (from: number, _to: number) => {
       // Paginated existing-transactions fetch: return the whole fake table on
       // the first page, then an empty page to terminate the loop.
@@ -90,7 +98,7 @@ function fakeFrom(table: string) {
   const originalEq = chain.eq;
   chain.eq = (col: string, val: string) => {
     if (chain.__updateRow && col === "id") {
-      state.updatedAccounts.push({ id: val, redbark_last_synced_at: chain.__updateRow.redbark_last_synced_at });
+      state.updatedAccounts.push({ id: val, ...chain.__updateRow });
       return Promise.resolve({ error: null });
     }
     return originalEq(col, val);
@@ -107,6 +115,14 @@ beforeEach(() => {
   listConnectionsMock.mockReset();
   listAccountsMock.mockReset();
   listTransactionsMock.mockReset();
+  getBalanceMock.mockReset();
+  getBalanceMock.mockResolvedValue({
+    account: "acct_1",
+    current: { amount: 123456, currency: "aud" },
+    available: { amount: 123456, currency: "aud" },
+    observed_at: "2026-03-10T00:00:00.000Z",
+    freshness: "fresh",
+  });
 });
 
 const activeBankingConnection = { id: "conn_1", status: "active", category: "banking" };
@@ -251,5 +267,46 @@ describe("runRedbarkSync", () => {
 
     const { runRedbarkSync } = await import("./redbarkSync");
     await expect(runRedbarkSync()).rejects.toMatchObject({ message: "transactions insert failed: insert failed" });
+  });
+
+  it("stores the live balance on the account and snapshots it for the day", async () => {
+    state.redbarkAccountOwners = [{ redbark_account_id: "acct_1", owner: "lloyd" }];
+    listConnectionsMock.mockResolvedValue([activeBankingConnection]);
+    listAccountsMock.mockResolvedValue([{ id: "acct_1", name: "Everyday", institution: { name: "NAB" } }]);
+    listTransactionsMock.mockResolvedValue([]);
+
+    const { runRedbarkSync } = await import("./redbarkSync");
+    const result = await runRedbarkSync();
+
+    expect(result.balanceErrors).toEqual([]);
+    // 123456 cents -> 1234.56 dollars
+    expect(state.updatedAccounts[0]).toMatchObject({ balance_current: 1234.56, balance_available: 1234.56 });
+    expect(state.balanceSnapshots).toEqual([
+      expect.objectContaining({ observed_on: "2026-03-10", current: 1234.56, available: 1234.56 }),
+    ]);
+  });
+
+  it("keeps imported transactions when the balance call fails", async () => {
+    state.redbarkAccountOwners = [{ redbark_account_id: "acct_1", owner: "lloyd" }];
+    getBalanceMock.mockRejectedValue(new Error("balance unavailable"));
+    listConnectionsMock.mockResolvedValue([activeBankingConnection]);
+    listAccountsMock.mockResolvedValue([{ id: "acct_1", name: "Everyday", institution: { name: "NAB" } }]);
+    listTransactionsMock.mockResolvedValue([
+      {
+        id: "txn_1",
+        date: "2026-03-01",
+        description: "Woolworths",
+        amount: { amount: 100, currency: "aud" },
+        direction: "debit",
+        merchant_name: "Woolworths",
+        provider_category: null,
+      },
+    ]);
+
+    const { runRedbarkSync } = await import("./redbarkSync");
+    const result = await runRedbarkSync();
+
+    expect(result.imported).toBe(1);
+    expect(result.balanceErrors).toEqual([{ name: "Everyday", message: "balance unavailable" }]);
   });
 });

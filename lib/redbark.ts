@@ -31,6 +31,14 @@ export type RedbarkAccount = {
   status: string;
 };
 
+export type RedbarkBalance = {
+  account: string;
+  current: RedbarkMoney; // negative for loans/credit cards (money owed)
+  available: RedbarkMoney | null;
+  observed_at: string;
+  freshness: "fresh" | "stale" | string;
+};
+
 export type RedbarkTransaction = {
   id: string;
   account: string;
@@ -97,6 +105,11 @@ export async function listConnections(): Promise<RedbarkConnection[]> {
     page = res.next_page_url ? new URL(res.next_page_url).searchParams.get("page") ?? undefined : undefined;
   } while (page);
   return out;
+}
+
+/** Live balance for one account. Amounts are in minor units (cents). */
+export async function getBalance(accountId: string): Promise<RedbarkBalance> {
+  return redbarkRequest<RedbarkBalance>(`/accounts/${accountId}/balance`);
 }
 
 export async function listAccounts(connectionId: string): Promise<RedbarkAccount[]> {
