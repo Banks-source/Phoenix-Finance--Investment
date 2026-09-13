@@ -7,11 +7,12 @@ import {
   ListChecks,
   PieChart,
   Receipt,
-  Upload,
   FileText,
   Wallet,
   LogOut,
   Flame,
+  Settings2,
+  PiggyBank,
 } from "lucide-react";
 
 const tabs = [
@@ -19,9 +20,10 @@ const tabs = [
   { href: "/transactions", label: "Transactions", icon: Receipt },
   { href: "/categories", label: "Categories", icon: PieChart },
   { href: "/review", label: "Review", icon: ListChecks },
-  { href: "/import", label: "Import", icon: Upload },
+  { href: "/budget", label: "Budget", icon: PiggyBank },
   { href: "/tax", label: "Tax", icon: FileText },
   { href: "/portfolio", label: "Portfolio", icon: Wallet },
+  { href: "/settings", label: "Settings", icon: Settings2 },
 ];
 
 export default function Nav({ pending, email }: { pending: number; email?: string | null }) {

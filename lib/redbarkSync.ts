@@ -1,6 +1,8 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { listConnections, listAccounts, listTransactions, RedbarkAccount } from "@/lib/redbark";
 import { categoriseSync, MerchantRule } from "@/lib/categorise";
+import { classifyMoneyMovement, extractAccountDigits } from "@/lib/transferClassification";
+import { resolveIncomeSubCategory, Owner } from "@/lib/incomeClassification";
 
 export type RedbarkSyncResult = {
   imported: number;
@@ -32,6 +34,9 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
 
   const { data: existing } = await supabase.from("transactions").select("date, amount, detail, owner");
   const seen = new Set((existing ?? []).map((e) => `${e.date}|${e.amount}|${e.detail}|${e.owner}`));
+
+  const { data: accountRows } = await supabase.from("accounts").select("account_label, account_number_masked");
+  const ourAccountDigits = extractAccountDigits(...(accountRows ?? []).flatMap((a) => [a.account_label, a.account_number_masked]));
 
   const connections = await listConnections();
   const bankingAccounts: RedbarkAccount[] = [];
@@ -74,7 +79,7 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
         })
         .select("id")
         .single();
-      if (error) throw error;
+      if (error) throw new Error(`accounts insert failed: ${error.message}`);
       accountId = created.id;
     }
 
@@ -90,6 +95,15 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
       }
       seen.add(key);
       const s = categoriseSync(t.merchant_name ?? t.description, t.description, merchantRules, t.provider_category);
+      // "Money Movement" alone doesn't say whether the money stayed in the
+      // household or actually left it — classify that direction here, on
+      // the raw bank description, rather than guessing later with less context.
+      const subCategory =
+        s.category === "Money Movement" && !s.sub_category
+          ? classifyMoneyMovement(t.description, ourAccountDigits) ?? s.sub_category
+          : s.category === "Income"
+            ? resolveIncomeSubCategory(t.description, owner as Owner)
+            : s.sub_category;
       toInsert.push({
         date: t.date,
         amount,
@@ -99,7 +113,7 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
         detail: t.description,
         merchant: t.merchant_name ?? t.description,
         category: s.category,
-        sub_category: s.sub_category,
+        sub_category: subCategory,
         type: s.type,
         status: "pending_review", // always — no silent auto-categorisation
         confidence: s.confidence,
@@ -109,7 +123,7 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
 
     if (toInsert.length > 0) {
       const { error } = await supabase.from("transactions").insert(toInsert);
-      if (error) throw error;
+      if (error) throw new Error(`transactions insert failed: ${error.message}`);
     }
 
     await supabase.from("accounts").update({ redbark_last_synced_at: new Date().toISOString() }).eq("id", accountId);

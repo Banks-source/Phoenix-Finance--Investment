@@ -76,6 +76,8 @@ export async function fetchTransactions(opts: FetchOpts = {}) {
   if (opts.status) q = q.eq("status", opts.status);
   if (opts.owner) q = q.eq("owner", opts.owner);
   if (opts.type) q = q.eq("type", opts.type);
+  if (opts.category) q = q.eq("category", opts.category);
+  if (opts.sub_category) q = q.eq("sub_category", opts.sub_category);
   if (opts.tax_category) q = q.eq("tax_category", opts.tax_category);
   if (opts.search) q = q.or(`detail.ilike.%${opts.search}%,merchant.ilike.%${opts.search}%`);
 
@@ -84,6 +86,46 @@ export async function fetchTransactions(opts: FetchOpts = {}) {
 
   const { data, count } = await q;
   return { rows: (data ?? []) as Txn[], count: count ?? 0 };
+}
+
+export interface MoneyMovementBreakdown {
+  internalTotal: number;
+  internalCount: number;
+  externalTotal: number;
+  externalCount: number;
+  unclassifiedCount: number;
+}
+
+/** Internal vs external transfer totals for the "Money Movement" category, for a period. */
+export async function fetchMoneyMovementBreakdown(period?: PeriodFilter): Promise<MoneyMovementBreakdown> {
+  const rows = await fetchAll<{ amount: number; sub_category: string | null }>((c) => {
+    let q = c.from("transactions").select("amount, sub_category").eq("category", "Money Movement");
+    if (period) {
+      const b = periodBounds(period);
+      if (b) q = q.gte("date", b[0]).lte("date", b[1]);
+    }
+    return q;
+  });
+
+  const out: MoneyMovementBreakdown = {
+    internalTotal: 0,
+    internalCount: 0,
+    externalTotal: 0,
+    externalCount: 0,
+    unclassifiedCount: 0,
+  };
+  for (const r of rows) {
+    if (r.sub_category === "Internal transfer") {
+      out.internalTotal += r.amount;
+      out.internalCount++;
+    } else if (r.sub_category === "External transfer") {
+      out.externalTotal += r.amount;
+      out.externalCount++;
+    } else {
+      out.unclassifiedCount++;
+    }
+  }
+  return out;
 }
 
 /** Every matching transaction (paged past the 1000-row cap) — for exports/tax. */
@@ -215,6 +257,25 @@ export async function fetchSubCategoryTotals(type: string, period?: PeriodFilter
   const map = new Map<string, { name: string; net: number; count: number }>();
   for (const r of rows) {
     const key = r.sub_category ?? "Other";
+    const e = map.get(key) ?? { name: key, net: 0, count: 0 };
+    e.net += Number(r.amount);
+    e.count += 1;
+    map.set(key, e);
+  }
+  return [...map.values()].sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+}
+
+/** Net by sub-category within one category, for a period — the drill-down level under Categories. */
+export async function fetchSubCategoryTotalsForCategory(category: string, period?: PeriodFilter) {
+  const b = period ? periodBounds(period) : null;
+  const rows = await fetchAll<{ sub_category: string | null; amount: number }>((c) => {
+    let q = c.from("transactions").select("sub_category, amount").eq("status", "approved").eq("category", category);
+    if (b) q = q.gte("date", b[0]).lte("date", b[1]);
+    return q;
+  });
+  const map = new Map<string, { name: string; net: number; count: number }>();
+  for (const r of rows) {
+    const key = r.sub_category ?? "Uncategorised";
     const e = map.get(key) ?? { name: key, net: 0, count: 0 };
     e.net += Number(r.amount);
     e.count += 1;

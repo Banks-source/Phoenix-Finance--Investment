@@ -92,7 +92,7 @@ Respond with strict JSON only: {"category": "...", "sub_category": "... or null"
   const def = CATEGORIES.find((c) => c.name === parsed.category);
 
   return {
-    category: parsed.category ?? "Financial",
+    category: parsed.category ?? "Uncategorised",
     sub_category: parsed.sub_category ?? null,
     type: def?.type ?? "needs_categorisation",
     confidence: parsed.confidence ?? 0.4,
@@ -138,7 +138,7 @@ export async function categoriseTransaction(
       // fall through to unmatched
     }
   }
-  return { category: "Financial", sub_category: null, type: "needs_categorisation", confidence: 0, method: "unmatched" };
+  return { category: "Uncategorised", sub_category: null, type: "spending", confidence: 0, method: "unmatched" };
 }
 
 /** Synchronous deterministic-only categorisation (no network). */

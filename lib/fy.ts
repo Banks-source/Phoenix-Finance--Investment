@@ -47,6 +47,9 @@ export function periodsFromDates(dates: string[]): {
   };
 }
 
+// Default period shown across the app when the user hasn't picked one.
+export const DEFAULT_CALENDAR_YEAR = 2026;
+
 export interface PeriodFilter {
   kind: "all" | "year" | "fy" | "custom";
   value?: number;

@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/kubera/sync", "schedule": "0 6 * * *" },
-    { "path": "/api/redbark/sync", "schedule": "0 7 * * *" }
+    { "path": "/api/redbark/sync", "schedule": "0 7 * * *" },
+    { "path": "/api/alerts/check", "schedule": "0 8 * * *" }
   ]
 }

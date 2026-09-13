@@ -36,10 +36,12 @@ export const CATEGORIES: CategoryDef[] = [
   { name: "Utilities", type: "bills_fixed" },
   { name: "Bills", type: "bills_fixed", notes: "Generic catch-all" },
   { name: "Fees", type: "bills_fixed" },
-  { name: "Investment", type: "transfers", notes: "Property capital, land tax, ASIC — was miscategorised as an expense historically" },
-  { name: "Money Movement", type: "transfers", notes: "Ashby Loan and Cash Withdrawal sub-categories are needs_categorisation" },
+  { name: "Family Assistance", type: "bills_fixed", notes: "Ongoing support payments to family (e.g. Rudy) — a real recurring expense, not a debt repayment" },
+  { name: "Cash Withdrawal", type: "spending", notes: "Cash pulled out is presumed spent" },
+  { name: "Investment", type: "transfers", notes: "Property capital, land tax, ASIC, and Ashby Loan principal transfers — the loan's interest is what's surfaced as a real cost" },
+  { name: "Money Movement", type: "transfers" },
   { name: "Income", type: "income" },
-  { name: "Financial", type: "needs_categorisation" },
+  { name: "Uncategorised", type: "spending", notes: "Nothing matched a rule yet — counted as spending so it isn't silently missing from Expenses" },
 ];
 
 export const CATEGORY_TYPE: Record<string, TxnType> = Object.fromEntries(
@@ -50,12 +52,6 @@ export const CATEGORY_TYPE: Record<string, TxnType> = Object.fromEntries(
 export function resolveType(category: string, subCategory?: string | null): TxnType {
   if (category === "Car & Transport" && (subCategory === "Car Loan" || subCategory === "Loan")) {
     return "debt";
-  }
-  if (
-    category === "Money Movement" &&
-    (subCategory === "Ashby Loan" || subCategory === "Cash Withdrawl" || subCategory === "Cash Withdrawal")
-  ) {
-    return "needs_categorisation";
   }
   return CATEGORY_TYPE[category] ?? "needs_categorisation";
 }

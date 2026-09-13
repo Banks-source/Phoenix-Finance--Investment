@@ -2,8 +2,7 @@
 import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Txn } from "@/lib/queries";
-import { CATEGORIES, resolveType } from "@/lib/taxonomy";
-import { deductibleBucketsBySchedule, SCHEDULE_LABELS } from "@/lib/taxcats";
+import { CATEGORIES } from "@/lib/taxonomy";
 import { money } from "@/lib/format";
 import { TypeBadge } from "@/components/ui";
 import { Check, CheckCheck, ChevronDown, ChevronRight, Undo2, X } from "lucide-react";
@@ -16,27 +15,25 @@ async function post(body: unknown) {
   });
 }
 
-// Tax tagging is a separate endpoint/layer from budget review (deductible /
-// tax_category / tax_note only — never touches status or budget category).
-async function postTax(body: unknown) {
-  await fetch("/api/claims", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-const TAX_BUCKETS = deductibleBucketsBySchedule();
-
-export default function ReviewQueue({ rows }: { rows: Txn[] }) {
+export default function ReviewQueue({ rows, allSubCategories = [] }: { rows: Txn[]; allSubCategories?: string[] }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [bulkCat, setBulkCat] = useState("");
-  const [bulkTaxCat, setBulkTaxCat] = useState("");
+  const [bulkSub, setBulkSub] = useState("");
   const [busy, setBusy] = useState(false);
   const [lastApproved, setLastApproved] = useState<string[] | null>(null);
   const [, startTransition] = useTransition();
+
+  // The rule-engine's curated list, plus anything already in view that
+  // isn't in it yet (e.g. a legacy free-text value not migrated over).
+  const knownSubs = useMemo(
+    () =>
+      [...new Set([...allSubCategories, ...rows.map((r) => r.sub_category).filter((s): s is string => !!s)])].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" })
+      ),
+    [rows, allSubCategories]
+  );
 
   // Group by current category so similar items can be validated together,
   // then sort each group by merchant name so identical merchants sit adjacent.
@@ -99,18 +96,6 @@ export default function ReviewQueue({ rows }: { rows: Txn[] }) {
     setBulkCat("");
     refresh();
   }
-  async function applyTaxToSelected() {
-    if (!selected.size || !bulkTaxCat) return;
-    setBusy(true);
-    await postTax({ ids: [...selected], tax_category: bulkTaxCat });
-    setBulkTaxCat("");
-    refresh();
-  }
-  async function setRowTaxCategory(id: string, tax_category: string) {
-    setBusy(true);
-    await postTax({ id, tax_category });
-    refresh();
-  }
   async function approveRow(id: string, category?: string) {
     setBusy(true);
     await post({ id, category });
@@ -120,6 +105,29 @@ export default function ReviewQueue({ rows }: { rows: Txn[] }) {
   async function setRowCategory(id: string, category: string) {
     setBusy(true);
     await post({ id, category, keepStatus: true });
+    refresh();
+  }
+  async function setRowSubCategory(id: string, sub_category: string) {
+    setBusy(true);
+    await post({ id, sub_category: sub_category || null, keepStatus: true });
+    refresh();
+  }
+  // Bulk-set sub-category, keeping each row's existing category (so a mixed
+  // selection across categories doesn't get collapsed into one).
+  async function setSubCategorySelected() {
+    if (!selected.size || !bulkSub.trim()) return;
+    setBusy(true);
+    const sub = bulkSub.trim();
+    const byCat = new Map<string | null, string[]>();
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    for (const id of selected) {
+      const cat = byId.get(id)?.category ?? null;
+      (byCat.get(cat) ?? byCat.set(cat, []).get(cat)!).push(id);
+    }
+    for (const [cat, ids] of byCat) {
+      await post(cat ? { ids, category: cat, sub_category: sub, keepStatus: true } : { ids, sub_category: sub, keepStatus: true });
+    }
+    setBulkSub("");
     refresh();
   }
   async function undoLastApproval() {
@@ -132,6 +140,11 @@ export default function ReviewQueue({ rows }: { rows: Txn[] }) {
 
   return (
     <div className="space-y-4">
+      <datalist id="review-known-subs">
+        {knownSubs.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
       {/* Undo toast — appears after any approval so a misclick is one click away */}
       {lastApproved && (
         <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
@@ -191,26 +204,19 @@ export default function ReviewQueue({ rows }: { rows: Txn[] }) {
 
         <div className="mx-1 h-5 w-px bg-gray-200" />
 
-        <select
-          className="select text-sm"
-          value={bulkTaxCat}
-          onChange={(e) => setBulkTaxCat(e.target.value)}
+        <input
+          className="input w-40 text-sm"
+          list="review-known-subs"
+          placeholder="Set sub-category…"
+          value={bulkSub}
+          onChange={(e) => setBulkSub(e.target.value)}
           disabled={!selected.size}
-        >
-          <option value="">Set tax category…</option>
-          {TAX_BUCKETS.map(({ schedule, items }) => (
-            <optgroup key={schedule} label={SCHEDULE_LABELS[schedule]}>
-              {items.map((t) => (
-                <option key={t.code} value={t.code}>
-                  {t.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-        <button className="btn-ghost" onClick={applyTaxToSelected} disabled={!selected.size || !bulkTaxCat || busy}>
-          Tag {selected.size}
+        />
+        <button className="btn-ghost" onClick={setSubCategorySelected} disabled={!selected.size || !bulkSub.trim() || busy}>
+          Set on {selected.size}
         </button>
+
+        <div className="mx-1 h-5 w-px bg-gray-200" />
 
         <button className="btn-ghost" onClick={approveSelected} disabled={!selected.size || busy}>
           <Check size={15} /> Approve {selected.size || ""}
@@ -283,23 +289,13 @@ export default function ReviewQueue({ rows }: { rows: Txn[] }) {
                         </option>
                       ))}
                     </select>
-                    <select
-                      className="select w-40 text-xs"
-                      value={t.tax_category ?? ""}
-                      onChange={(e) => setRowTaxCategory(t.id, e.target.value)}
-                      title="Tax category"
-                    >
-                      <option value="">Tax…</option>
-                      {TAX_BUCKETS.map(({ schedule, items: bucketItems }) => (
-                        <optgroup key={schedule} label={SCHEDULE_LABELS[schedule]}>
-                          {bucketItems.map((tc) => (
-                            <option key={tc.code} value={tc.code}>
-                              {tc.label}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ))}
-                    </select>
+                    <SubInput
+                      key={t.sub_category ?? ""}
+                      value={t.sub_category ?? ""}
+                      onCommit={(v) => {
+                        if (v !== (t.sub_category ?? "")) setRowSubCategory(t.id, v);
+                      }}
+                    />
                     <button
                       className="btn-primary !px-2.5"
                       onClick={() => approveRow(t.id)}
@@ -316,5 +312,24 @@ export default function ReviewQueue({ rows }: { rows: Txn[] }) {
         );
       })}
     </div>
+  );
+}
+
+// Per-row sub-category editor. Commits on Enter or blur (only when changed) so
+// we don't fire a request on every keystroke.
+function SubInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  return (
+    <input
+      className="input w-36 text-xs"
+      list="review-known-subs"
+      placeholder="Sub-category…"
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      onBlur={() => onCommit(v.trim())}
+    />
   );
 }

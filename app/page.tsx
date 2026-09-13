@@ -8,7 +8,7 @@ import {
   fetchSubCategoryTotals,
   fetchCategoryMonthlyTrend,
 } from "@/lib/queries";
-import { parsePeriod, periodLabel, EXPENSE_TYPES } from "@/lib/fy";
+import { parsePeriod, periodLabel, EXPENSE_TYPES, DEFAULT_CALENDAR_YEAR } from "@/lib/fy";
 import { money, TYPE_COLORS } from "@/lib/format";
 import Link from "next/link";
 
@@ -21,11 +21,8 @@ export default async function OverviewPage({
 }) {
   const { years, fys } = await getAvailablePeriods();
 
-  // Default to the most recent financial year if no period chosen.
-  const effective =
-    !searchParams.period && fys.length > 0
-      ? { period: "fy", value: String(fys[0]) }
-      : searchParams;
+  // Default to the current calendar year if no period chosen.
+  const effective = !searchParams.period ? { period: "year", value: String(DEFAULT_CALENDAR_YEAR) } : searchParams;
   const period = parsePeriod(effective);
 
   const [totals, categories, incomeSubs, transferSubs, trend] = await Promise.all([
@@ -50,26 +47,15 @@ export default async function OverviewPage({
   const expenseHref = (name: string) =>
     `/reclassify?${new URLSearchParams({ category: name, ...periodParams })}`;
 
-  // Income broken down by sub-category (salary, rent received, interest, …).
-  // Ashby rent is partly owner-funded: ~$1,300 per disbursement is Lloyd's own
-  // money (gift to parents that cycles back as rent), not third-party income.
-  const RENT_TOPUP_PER = 1300;
-  const incomeCats = incomeSubs.map((s) => {
-    const item = {
-      category: s.name,
-      net: s.net,
-      count: s.count,
-      abs: Math.abs(s.net),
-      href: incomeHref(s.name),
-      note: undefined as string | undefined,
-    };
-    if (s.name === "Rent received") {
-      const topup = RENT_TOPUP_PER * s.count;
-      const genuine = Math.max(0, item.abs - topup);
-      item.note = `incl. ~${money(topup)} owner top-up (your funds) · genuine rent ~${money(genuine)}`;
-    }
-    return item;
-  });
+  // Income broken down by sub-category (Lloyd/Milani salary, rent, taxes, …).
+  const incomeCats = incomeSubs.map((s) => ({
+    category: s.name,
+    net: s.net,
+    count: s.count,
+    abs: Math.abs(s.net),
+    href: incomeHref(s.name),
+    note: undefined as string | undefined,
+  }));
   // Ashby investment-loan costs are stored as transfers (isolated from household
   // spending) but are real property expenses — surface them on the Overview so
   // the expense side mirrors the rent income line.
@@ -108,7 +94,7 @@ export default async function OverviewPage({
       <PageHeader
         title="Overview"
         subtitle={periodLabel(period)}
-        actions={<PeriodSelector years={years} fys={fys} fallback={fys.length > 0 ? `fy:${fys[0]}` : undefined} />}
+        actions={<PeriodSelector years={years} fys={fys} fallback={`year:${DEFAULT_CALENDAR_YEAR}`} />}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

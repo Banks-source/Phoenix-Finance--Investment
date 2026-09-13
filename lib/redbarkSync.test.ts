@@ -244,6 +244,6 @@ describe("runRedbarkSync", () => {
     ]);
 
     const { runRedbarkSync } = await import("./redbarkSync");
-    await expect(runRedbarkSync()).rejects.toMatchObject({ message: "insert failed" });
+    await expect(runRedbarkSync()).rejects.toMatchObject({ message: "transactions insert failed: insert failed" });
   });
 });

@@ -1,7 +1,8 @@
 import { PageHeader } from "@/components/ui";
 import ReclassifyQueue from "@/components/ReclassifyQueue";
-import { getAvailablePeriods, fetchAllTransactions } from "@/lib/queries";
-import { parsePeriod, periodLabel } from "@/lib/fy";
+import { fetchAllTransactions } from "@/lib/queries";
+import { fetchAllSubCategoryNames } from "@/lib/subCategoriesTable";
+import { parsePeriod, periodLabel, DEFAULT_CALENDAR_YEAR } from "@/lib/fy";
 
 export const dynamic = "force-dynamic";
 
@@ -10,22 +11,22 @@ export default async function ReclassifyPage({
 }: {
   searchParams: { period?: string; value?: string; from?: string; to?: string; category?: string; sub_category?: string; type?: string };
 }) {
-  const { fys } = await getAvailablePeriods();
-
-  // Default to the most recent financial year if no period chosen.
-  const effective =
-    !searchParams.period && fys.length > 0
-      ? { period: "fy", value: String(fys[0]) }
-      : { period: searchParams.period, value: searchParams.value, from: searchParams.from, to: searchParams.to };
+  // Default to the current calendar year if no period chosen.
+  const effective = !searchParams.period
+    ? { period: "year", value: String(DEFAULT_CALENDAR_YEAR) }
+    : { period: searchParams.period, value: searchParams.value, from: searchParams.from, to: searchParams.to };
   const period = parsePeriod(effective);
 
-  const { rows } = await fetchAllTransactions({
-    period,
-    status: "approved",
-    type: searchParams.type,
-    category: searchParams.category,
-    sub_category: searchParams.sub_category,
-  });
+  const [{ rows }, allSubCategories] = await Promise.all([
+    fetchAllTransactions({
+      period,
+      status: "approved",
+      type: searchParams.type,
+      category: searchParams.category,
+      sub_category: searchParams.sub_category,
+    }),
+    fetchAllSubCategoryNames(),
+  ]);
 
   const what = searchParams.sub_category || searchParams.category || searchParams.type || "transactions";
 
@@ -43,7 +44,7 @@ export default async function ReclassifyPage({
         title={`Reclassify · ${what}`}
         subtitle={`${rows.length.toLocaleString()} approved · ${periodLabel(period)} — change any that are in the wrong category`}
       />
-      <ReclassifyQueue rows={rows} backHref={backHref} />
+      <ReclassifyQueue rows={rows} backHref={backHref} allSubCategories={allSubCategories} />
     </div>
   );
 }

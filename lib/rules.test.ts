@@ -36,16 +36,49 @@ describe("ruleCategorise — bill payments made via BPAY/transfer", () => {
     expect(result.type).toBe("transfers");
   });
 
-  it("still categorises an ATM cash withdrawal as needs_categorisation", () => {
+  it("categorises an ATM cash withdrawal as its own Cash Withdrawal expense category", () => {
     const result = ruleCategorise("CBA ATM CASH WITHDRAWAL", "");
-    expect(result.category).toBe("Money Movement");
-    expect(result.sub_category).toBe("Cash Withdrawal");
-    expect(result.type).toBe("needs_categorisation");
+    expect(result.category).toBe("Cash Withdrawal");
+    expect(result.type).toBe("spending");
   });
 
   it("still categorises a direct-debit (non-BPAY) utility payment as Utilities", () => {
     const result = ruleCategorise("DIRECT DEBIT ORIGIN ENERGY", "ORIGIN ENERGY");
     expect(result.category).toBe("Utilities");
     expect(result.type).toBe("bills_fixed");
+  });
+});
+
+describe("ruleCategorise — loan/redraw buffer transfers vs the interest they fund", () => {
+  it("categorises an Ashby investment-loan transfer as Investment/transfers, not debt (interest is the real cost, tracked separately)", () => {
+    const result = ruleCategorise("Transfer To milani CommBank App Ashby loan", "");
+    expect(result.category).toBe("Investment");
+    expect(result.sub_category).toBe("Ashby Loan");
+    expect(result.type).toBe("transfers");
+  });
+
+  it("categorises a Westpac Flexi Loan buffer payment as Money Movement/transfers, not debt", () => {
+    const result = ruleCategorise("lloyd thomas D5510078021 WESTPAC PAYMENT", "");
+    expect(result.category).toBe("Money Movement");
+    expect(result.sub_category).toBe("Internal transfer");
+    expect(result.type).toBe("transfers");
+  });
+
+  it("categorises the Westpac Flexi Loan account's own inbound/outbound buffer legs as Money Movement", () => {
+    expect(ruleCategorise("TFR FROM Westpa c Choice", "").category).toBe("Money Movement");
+    expect(ruleCategorise("WITHDRAWAL", "WITHDRAWAL").category).toBe("Money Movement");
+  });
+
+  it("categorises a Rudy transfer as Family Assistance, a real recurring expense (not a debt repayment)", () => {
+    const result = ruleCategorise("RUDY M7844318631", "");
+    expect(result.category).toBe("Family Assistance");
+    expect(result.type).toBe("bills_fixed");
+  });
+
+  it("keeps the Ashby loan's interest charge distinct from the principal transfer, so it isn't dropped from the interest total", () => {
+    const result = ruleCategorise("Interest Charge — Ashby INV loan 200411638", "");
+    expect(result.category).toBe("Investment");
+    expect(result.sub_category).toBe("Ashby loan interest");
+    expect(result.type).toBe("transfers");
   });
 });

@@ -21,9 +21,11 @@ async function post(body: unknown) {
 export default function ReclassifyQueue({
   rows,
   backHref,
+  allSubCategories = [],
 }: {
   rows: Txn[];
   backHref: string;
+  allSubCategories?: string[];
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -35,13 +37,14 @@ export default function ReclassifyQueue({
   const [sortBy, setSortBy] = useState<"merchant" | "date">("merchant");
   const [, startTransition] = useTransition();
 
-  // Existing sub-categories in view, for the type-ahead datalist.
+  // The rule engine's curated list, plus anything already in view that
+  // isn't in it yet (e.g. a legacy free-text value not migrated over).
   const knownSubs = useMemo(
     () =>
-      [...new Set(rows.map((r) => r.sub_category).filter((s): s is string => !!s))].sort((a, b) =>
+      [...new Set([...allSubCategories, ...rows.map((r) => r.sub_category).filter((s): s is string => !!s)])].sort((a, b) =>
         a.localeCompare(b, undefined, { sensitivity: "base" })
       ),
-    [rows]
+    [rows, allSubCategories]
   );
 
   // Group by current category, then sort each group by the chosen key.

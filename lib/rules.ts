@@ -31,9 +31,16 @@ export const RULES: Rule[] = [
   { re: /INTEREST ON PURCHASE|INTEREST CHARGED|DEBIT INT RATE/, category: "Fees", sub_category: "Interest charged", type: "bills_fixed" },
 
   // ---- Debt repayments (creditors — see PRD known gap) --------------------
-  { re: /WESTPAC PAYMENT/, category: "Money Movement", sub_category: "Westpac repayment", type: "debt" },
-  { re: /\bRUDY\b|RUDOLPH THOMAS/, category: "Money Movement", sub_category: "Rudy", type: "debt" },
-  { re: /ASHBY LOAN|ASHBY/, category: "Money Movement", sub_category: "Ashby Loan", type: "debt" },
+  // Ashby and Westpac here are transfers moving cash to fund a loan/redraw
+  // account we also own — not a standalone expense. The real cost (interest)
+  // is captured separately where it's actually charged, so these are `transfers`
+  // and not `debt`/`bills_fixed` — counting both would double the cost.
+  { re: /\bRUDY\b|RUDOLPH THOMAS/, category: "Family Assistance", sub_category: "Rudy", type: "bills_fixed" },
+  // The interest charge ("Ashby INV loan") must be checked before the bare
+  // principal-transfer rule below, or it'd get swallowed as "Ashby Loan" and
+  // silently drop out of the interest total the dashboard surfaces as a cost.
+  { re: /INTEREST CHARGE.*ASHBY|ASHBY.*INTEREST CHARGE/, category: "Investment", sub_category: "Ashby loan interest", type: "transfers" },
+  { re: /ASHBY LOAN/, category: "Investment", sub_category: "Ashby Loan", type: "transfers" },
   { re: /ZIPMONEY|ZIP MONEY/, category: "Money Movement", sub_category: "ZipMoney", type: "debt" },
 
   // ---- Transfers / money movement (unambiguous only) ----------------------
@@ -43,8 +50,12 @@ export const RULES: Rule[] = [
   // Australia. A rule this generic checked this early was swallowing real
   // bill payments (e.g. "BPAY ... AGL Energy") into Money Movement before
   // the AGL/Utilities rule below ever got a chance to match.
-  { re: /CBA ATM|ATM DEBIT|CASH WITHDRAWAL|CASH WITHDRAWL/, category: "Money Movement", sub_category: "Cash Withdrawal", type: "needs_categorisation" },
+  { re: /CBA ATM|ATM DEBIT|CASH WITHDRAWAL|CASH WITHDRAWL/, category: "Cash Withdrawal", type: "spending" },
   { re: /MILANI SIMIC|LLOYD THOMAS|LLOYD EDWARD THOMA/, category: "Money Movement", sub_category: "Internal transfer", type: "transfers" },
+  // Westpac Flexi Loan used as a buffer/redraw account — moving cash to/from
+  // it is money movement, not a repayment. Its own interest/fees are captured
+  // directly on the account (see the Fees rules above) and stay real costs.
+  { re: /WESTPAC PAYMENT|TFR FROM WESTPA|\bWITHDRAWAL\b/, category: "Money Movement", sub_category: "Internal transfer", type: "transfers" },
 
   // ---- Subscriptions / tech ----------------------------------------------
   { re: /NETFLIX|HUBBL|KAYO|BINGE|DISNEY|SPOTIFY|STAN\b|AMAZON PRIME/, category: "Subscriptions", type: "bills_fixed" },
@@ -150,7 +161,7 @@ export const NAB_CATEGORY_MAP: Record<string, { category: string; type: TxnType 
   "Internal transfers": { category: "Money Movement", type: "transfers" },
   "Transfers in": { category: "Money Movement", type: "transfers" },
   "Transfers out": { category: "Money Movement", type: "transfers" },
-  "Cash": { category: "Money Movement", type: "transfers" },
+  "Cash": { category: "Cash Withdrawal", type: "spending" },
   "Refund": { category: "Income", type: "income" },
   "Income": { category: "Income", type: "income" },
 };
@@ -185,5 +196,5 @@ export function ruleCategorise(
     const m = NAB_CATEGORY_MAP[bankCategory];
     return { category: m.category, sub_category: null, type: m.type, method: "nab_category", confidence: 0.6 };
   }
-  return { category: "Financial", sub_category: null, type: "needs_categorisation", method: "unmatched", confidence: 0 };
+  return { category: "Uncategorised", sub_category: null, type: "spending", method: "unmatched", confidence: 0 };
 }
