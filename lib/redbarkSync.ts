@@ -32,8 +32,20 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
   const { data: rules } = await supabase.from("merchant_rules").select("*");
   const merchantRules = (rules ?? []) as MerchantRule[];
 
-  const { data: existing } = await supabase.from("transactions").select("date, amount, detail, owner");
-  const seen = new Set((existing ?? []).map((e) => `${e.date}|${e.amount}|${e.detail}|${e.owner}`));
+  // PostgREST caps a select at 1000 rows, and this table has grown well past
+  // that — an unpaginated fetch here silently missed most existing rows and
+  // let real duplicate transactions get re-inserted on sync.
+  const existing: { date: string; amount: number; detail: string | null; owner: string }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("date, amount, detail, owner")
+      .range(from, from + 999);
+    if (error) throw new Error(`existing transactions fetch failed: ${error.message}`);
+    existing.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  const seen = new Set(existing.map((e) => `${e.date}|${e.amount}|${e.detail}|${e.owner}`));
 
   const { data: accountRows } = await supabase.from("accounts").select("account_label, account_number_masked");
   const ourAccountDigits = extractAccountDigits(...(accountRows ?? []).flatMap((a) => [a.account_label, a.account_number_masked]));

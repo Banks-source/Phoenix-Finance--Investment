@@ -71,6 +71,12 @@ function fakeFrom(table: string) {
       chain.__updateRow = row;
       return chain;
     },
+    range: (from: number, _to: number) => {
+      // Paginated existing-transactions fetch: return the whole fake table on
+      // the first page, then an empty page to terminate the loop.
+      const data = table === "transactions" && from === 0 ? state.existingTransactions : [];
+      return Promise.resolve({ data, error: null });
+    },
     then: (onFulfilled: any) => {
       // Only reached for a bare `.select(...)` with no further chaining.
       let data: any = [];
