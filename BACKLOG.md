@@ -2,6 +2,18 @@
 
 Handoff point from Cowork build session to local dev (2026-07-02). Ordered by priority, not by tab.
 
+## 🟣 Next session (queued 2026-09-13 night, mobile/UI push)
+
+Likes the new Overview design and wants it rolled out site-wide. In priority order as given:
+
+1. **Roll the new Overview visual style across the whole site.** Also asked: do we need a design system? Given the app is currently ad-hoc Tailwind classes (`card`, `btn-primary`, etc. in `globals.css`) with no documented tokens, worth doing a light tokens pass (colour, spacing, type scale) before extending the look everywhere — otherwise every new page reinvents it slightly differently.
+2. **Bank logos on account rows** — currently a two-letter initial placeholder (`app/page.tsx`). Redbark's account payload already includes a real `institution.logo` URL (confirmed live: e.g. Westpac's), so this is just wiring, not a new integration.
+3. **Add investment account balances to the cash banner, right-aligned** — "Stress Free Life" account (personal investment) and a "play account" (high risk). Placeholders for now; real numbers come from the investment/Kubera side later.
+4. **Per-account recent transactions, bank-app style** — tapping an account currently jumps to a filtered `/transactions` search. Wants something that reads like each bank's own app (a proper per-account transaction list/view).
+5. **Budget: add an annual view alongside the monthly one** — e.g. "$220K budget for the year — on target," not just month-by-month. `/budget` and the Overview budget card are both month-only right now.
+6. **Overview needs a rethink, not a tweak.** Explicitly said the line graph (`CategoryTrendChart`) "isn't really working." Needs a real conversation about what's actually worth surfacing here before building — not just a different chart type.
+7. **Open question — needs a conversation, not a silent decision: internal transfer vs. debt paydown.** He just put $25K onto the Westpac Flexi Loan (buffer account) — that's a genuine debt paydown, not a transfer. But money moving in/out of Westpac for short-term/temporary reasons should probably read as an internal transfer instead. Both look identical in the data (a transfer from NAB to Westpac) and the current rule (`lib/rules.ts`, `WESTPAC PAYMENT|TFR FROM WESTPA|\bWITHDRAWAL\b` → `Money Movement/Internal transfer`) always calls it internal — so going forward, matching NAB-side transactions need a way to distinguish "topping up the buffer" from "actually paying down the loan." Likely needs some explicit signal (amount threshold? a manual flag at entry? something else) rather than guessing from text alone — this is exactly the kind of judgement call the app's "no silent categorisation" rule exists for, so surface it for review rather than picking one automatically.
+
 ## 🔴 Urgent — do this before using the app for real
 
 - **No login wall.** Every page currently runs its Supabase queries server-side with the service role key regardless of who's requesting the page. RLS blocks direct anon-key access to the database, but it does **not** stop anyone with the Vercel URL from loading `/`, `/transactions`, etc. and seeing everything — because the app itself has no auth check. This is the biggest gap between "deployed" and "safe to actually use." Needs:
