@@ -12,7 +12,7 @@ export interface BudgetRow {
   spent: number; // this calendar month so far
 }
 
-export default function BudgetTable({ rows }: { rows: BudgetRow[] }) {
+export default function BudgetTable({ rows, periodLabel = "this month" }: { rows: BudgetRow[]; periodLabel?: string }) {
   const router = useRouter();
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export default function BudgetTable({ rows }: { rows: BudgetRow[] }) {
                 />
               </div>
               <div className="mt-1 text-xs text-gray-500">
-                {money(r.spent)} of {money(r.budget)} this month ({pct}%)
+                {money(r.spent)} of {money(r.budget)} {periodLabel} ({pct}%)
               </div>
             </div>
 

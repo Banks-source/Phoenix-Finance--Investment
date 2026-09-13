@@ -47,11 +47,17 @@ export async function fetchYtdAverageByCategory(year: number): Promise<Record<st
   return averages;
 }
 
-/** This calendar month's actual spend so far, per expense category. */
-export async function fetchCurrentMonthSpendByCategory(): Promise<Record<string, number>> {
+/**
+ * Actual spend per expense category for one calendar month (1-12). Pass the
+ * month being viewed on /budget — defaults to today's month/year there, but
+ * the user can page back/forward to any month to check it against budget.
+ */
+export async function fetchMonthSpendByCategory(year: number, month: number): Promise<Record<string, number>> {
   const today = new Date();
-  const from = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
-  const to = today.toISOString().slice(0, 10);
+  const isCurrentMonth = year === today.getFullYear() && month === today.getMonth() + 1;
+  const from = `${year}-${String(month).padStart(2, "0")}-01`;
+  // Last real day of the month, or today if it's the month in progress.
+  const to = isCurrentMonth ? today.toISOString().slice(0, 10) : new Date(year, month, 0).toISOString().slice(0, 10);
 
   const rows = await fetchAll<{ category: string | null; type: string; amount: number }>((c) =>
     c.from("transactions").select("category, type, amount").eq("status", "approved").gte("date", from).lte("date", to)
@@ -67,7 +73,8 @@ export async function fetchCurrentMonthSpendByCategory(): Promise<Record<string,
 
 export async function fetchCategoryBudgets(): Promise<Record<string, number>> {
   const supabase = createServiceClient();
-  const { data } = await supabase.from("category_budgets").select("category, monthly_target");
+  const { data, error } = await supabase.from("category_budgets").select("category, monthly_target");
+  if (error) throw new Error(`category_budgets fetch failed: ${error.message}`);
   const out: Record<string, number> = {};
   for (const r of data ?? []) out[r.category] = Number(r.monthly_target);
   return out;

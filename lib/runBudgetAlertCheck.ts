@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { fetchAlertRules } from "@/lib/alertRules";
-import { fetchCategoryBudgets, fetchCurrentMonthSpendByCategory } from "@/lib/budgets";
+import { fetchCategoryBudgets, fetchMonthSpendByCategory } from "@/lib/budgets";
 import { findTriggeredAlerts, formatAlertMessage } from "@/lib/alerts/checkBudgetAlerts";
 import { sendEmailAlert, sendSmsAlert } from "@/lib/alerts/notify";
 
@@ -20,10 +20,11 @@ function currentPeriod(): string {
 
 export async function runBudgetAlertCheck(): Promise<BudgetAlertCheckResult> {
   const supabase = createServiceClient();
+  const now = new Date();
   const [rules, budgets, spend] = await Promise.all([
     fetchAlertRules(),
     fetchCategoryBudgets(),
-    fetchCurrentMonthSpendByCategory(),
+    fetchMonthSpendByCategory(now.getFullYear(), now.getMonth() + 1),
   ]);
 
   const triggered = findTriggeredAlerts(rules, spend, budgets);
