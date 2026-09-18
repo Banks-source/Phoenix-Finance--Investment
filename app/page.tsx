@@ -1,13 +1,9 @@
 import PeriodSelector from "@/components/PeriodSelector";
-import CategoryTrendChart from "@/components/CategoryTrendChart";
+import NetWorthTrend from "@/components/NetWorthTrend";
+import BankLogo from "@/components/BankLogo";
 import { PageHeader } from "@/components/ui";
-import {
-  getAvailablePeriods,
-  fetchTypeTotals,
-  fetchCategoryTotals,
-  fetchSubCategoryTotals,
-  fetchCategoryMonthlyTrend,
-} from "@/lib/queries";
+import { getAvailablePeriods, fetchTypeTotals, fetchCategoryTotals, fetchSubCategoryTotals } from "@/lib/queries";
+import { fetchNetWorthHistory } from "@/lib/allocation";
 import { fetchBalanceSummary } from "@/lib/balances";
 import { fetchCategoryBudgets, fetchMonthSpendByCategory, fetchYtdAverageByCategory } from "@/lib/budgets";
 import { CATEGORIES } from "@/lib/taxonomy";
@@ -28,13 +24,13 @@ export default async function OverviewPage({
   const period = parsePeriod(effective);
 
   const today = new Date();
-  const [totals, categories, incomeSubs, transferSubs, trend, balances, budgets, monthSpend, ytdAverages] =
+  const [totals, categories, incomeSubs, transferSubs, netWorthHistory, balances, budgets, monthSpend, ytdAverages] =
     await Promise.all([
       fetchTypeTotals(period),
       fetchCategoryTotals(period),
       fetchSubCategoryTotals("income", period),
       fetchSubCategoryTotals("transfers", period),
-      fetchCategoryMonthlyTrend(period),
+      fetchNetWorthHistory(),
       fetchBalanceSummary(),
       fetchCategoryBudgets(),
       fetchMonthSpendByCategory(today.getFullYear(), today.getMonth() + 1),
@@ -108,14 +104,29 @@ export default async function OverviewPage({
     <div className="space-y-5">
       {/* ---- Money on hand ------------------------------------------------ */}
       <section className="card overflow-hidden">
-        <div className="border-b bg-gradient-to-br from-indigo-600 to-indigo-700 px-5 py-5 text-white">
-          <div className="text-xs font-medium uppercase tracking-wide text-indigo-200">Available cash</div>
-          <div className="mt-1 text-3xl font-semibold tabular">{money(balances.cash)}</div>
-          {balances.debt > 0 && (
-            <div className="mt-1 text-sm text-indigo-100">
-              {money(balances.debt)} owed · {money(balances.net, { sign: true })} net
-            </div>
-          )}
+        <div className="flex items-start justify-between gap-4 border-b bg-gradient-to-br from-indigo-600 to-indigo-700 px-5 py-5 text-white">
+          <div className="min-w-0">
+            <div className="text-xs font-medium uppercase tracking-wide text-indigo-200">Available cash</div>
+            <div className="mt-1 text-3xl font-semibold tabular">{money(balances.cash)}</div>
+            {balances.debt > 0 && (
+              <div className="mt-1 text-sm text-indigo-100">
+                {money(balances.debt)} owed · {money(balances.net, { sign: true })} net
+              </div>
+            )}
+          </div>
+          {/* Placeholders until these balances come from the investment side. */}
+          <div className="shrink-0 space-y-2.5 text-right" title="Placeholder — will read from your investment accounts">
+            {[
+              { name: "Stress Free Life", note: "Personal investment" },
+              { name: "Play", note: "High risk" },
+            ].map((p) => (
+              <div key={p.name}>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-indigo-200">{p.name}</div>
+                <div className="text-lg font-semibold leading-tight tabular text-indigo-50/90">—</div>
+                <div className="text-[10px] text-indigo-200/80">{p.note}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {balances.accounts.length === 0 ? (
@@ -125,14 +136,8 @@ export default async function OverviewPage({
         ) : (
           <div className="divide-y divide-gray-100">
             {balances.accounts.map((a) => (
-              <Link
-                key={a.id}
-                href={`/transactions?search=${encodeURIComponent(a.label)}`}
-                className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50"
-              >
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gray-100 text-xs font-semibold text-gray-500">
-                  {a.institution.slice(0, 2).toUpperCase()}
-                </span>
+              <Link key={a.id} href={`/accounts/${a.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">
+                <BankLogo logo={a.logo} institution={a.institution} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{a.label}</span>
                   <span className="block truncate text-xs text-gray-400">
@@ -233,11 +238,13 @@ export default async function OverviewPage({
       </div>
 
       <div className="card p-5">
-        <div className="mb-4 flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold">Category trend</h2>
-          <span className="text-xs text-gray-400">{periodLabel(period)}, by month</span>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold">Net worth</h2>
+          <Link href="/portfolio" className="text-xs text-indigo-600 hover:underline">
+            Portfolio →
+          </Link>
         </div>
-        <CategoryTrendChart categories={trend.categories} series={trend.series} />
+        <NetWorthTrend points={netWorthHistory} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

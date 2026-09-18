@@ -25,10 +25,9 @@ async function fetchAll<T>(build: (c: AnyClient) => any): Promise<T[]> {
  * "Months elapsed" includes the current partial month as a full unit, same
  * approach as fetchAverageMonthlySpend in lib/queries.ts.
  */
-export async function fetchYtdAverageByCategory(year: number): Promise<Record<string, number>> {
+export async function fetchYtdSpendByCategory(year: number): Promise<Record<string, number>> {
   const today = new Date();
   const isCurrentYear = today.getFullYear() === year;
-  const monthsElapsed = isCurrentYear ? today.getMonth() + 1 : 12;
   const from = `${year}-01-01`;
   const to = isCurrentYear ? today.toISOString().slice(0, 10) : `${year}-12-31`;
 
@@ -41,6 +40,13 @@ export async function fetchYtdAverageByCategory(year: number): Promise<Record<st
     if (!r.category || !(EXPENSE_TYPES as string[]).includes(r.type)) continue;
     totals[r.category] = (totals[r.category] ?? 0) + Math.abs(Number(r.amount));
   }
+  return totals;
+}
+
+export async function fetchYtdAverageByCategory(year: number): Promise<Record<string, number>> {
+  const today = new Date();
+  const monthsElapsed = today.getFullYear() === year ? today.getMonth() + 1 : 12;
+  const totals = await fetchYtdSpendByCategory(year);
 
   const averages: Record<string, number> = {};
   for (const [cat, total] of Object.entries(totals)) averages[cat] = total / monthsElapsed;

@@ -87,6 +87,17 @@ export function deriveMoneyMovementSubCategory(
   return "Needs review";
 }
 
+// A big move to/from the Westpac buffer loan could be a real paydown or a
+// temporary top-up — identical in the data. Rather than guess, anything at or
+// above this is routed to Review for an explicit Internal transfer / Debt
+// paydown decision. Smaller everyday movements stay Internal transfer.
+export const BUFFER_DECISION_THRESHOLD = 2000;
+
+export function needsBufferDecision(detail: string | null, amount: number): boolean {
+  if (Math.abs(amount) < BUFFER_DECISION_THRESHOLD) return false;
+  return /WESTPAC PAYMENT|TFR FROM WESTPA/i.test(detail ?? "");
+}
+
 /** Pulls 4+ digit runs out of an account label or masked number for matching. */
 export function extractAccountDigits(...values: (string | null | undefined)[]): string[] {
   const digits = new Set<string>();

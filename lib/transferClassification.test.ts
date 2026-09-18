@@ -1,5 +1,25 @@
 import { describe, it, expect } from "vitest";
-import { classifyMoneyMovement, deriveMoneyMovementSubCategory, extractAccountDigits } from "./transferClassification";
+import {
+  classifyMoneyMovement,
+  deriveMoneyMovementSubCategory,
+  extractAccountDigits,
+  needsBufferDecision,
+} from "./transferClassification";
+
+describe("needsBufferDecision", () => {
+  it("flags a large Westpac buffer move for an explicit paydown-vs-transfer call", () => {
+    expect(needsBufferDecision("lloyd thomas D5510078021 WESTPAC PAYMENT", -25000)).toBe(true);
+    expect(needsBufferDecision("C57334 TFR FROM Westpa c Choice", 25000)).toBe(true);
+  });
+
+  it("leaves small everyday buffer movements as internal transfers", () => {
+    expect(needsBufferDecision("lloyd thomas H7169196683 WESTPAC PAYMENT", -1999.99)).toBe(false);
+  });
+
+  it("ignores large transfers that have nothing to do with Westpac", () => {
+    expect(needsBufferDecision("Transfer to xx2697 CommBank app", -5000)).toBe(false);
+  });
+});
 
 const OUR_DIGITS = extractAccountDigits("CAB - 2697", "CAB - 5288", "xxxx8212", "xxxx0140", "xxxx8814", "xxxx0982");
 

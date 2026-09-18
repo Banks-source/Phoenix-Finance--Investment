@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { listConnections, listAccounts, listTransactions, getBalance, RedbarkAccount } from "@/lib/redbark";
 import { categoriseSync, MerchantRule } from "@/lib/categorise";
-import { classifyMoneyMovement, extractAccountDigits } from "@/lib/transferClassification";
+import { classifyMoneyMovement, extractAccountDigits, needsBufferDecision } from "@/lib/transferClassification";
 import { resolveIncomeSubCategory, Owner } from "@/lib/incomeClassification";
 
 export type RedbarkSyncResult = {
@@ -102,6 +102,12 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
       accountId = created.id;
     }
 
+    // Bank logo for the dashboard. Separate from the balance update below so a
+    // missing column (migration 0017 not yet applied) can't lose the balance.
+    if (acct.institution.logo) {
+      await supabase.from("accounts").update({ institution_logo: acct.institution.logo }).eq("id", accountId);
+    }
+
     const txns = await listTransactions(acct.id, { from, includePending: false });
     const toInsert: any[] = [];
     for (const t of txns) {
@@ -117,12 +123,15 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
       // "Money Movement" alone doesn't say whether the money stayed in the
       // household or actually left it — classify that direction here, on
       // the raw bank description, rather than guessing later with less context.
-      const subCategory =
+      const baseSubCategory =
         s.category === "Money Movement" && !s.sub_category
           ? classifyMoneyMovement(t.description, ourAccountDigits) ?? s.sub_category
           : s.category === "Income"
             ? resolveIncomeSubCategory(t.description, owner as Owner)
             : s.sub_category;
+      // Big Westpac buffer moves need a human call: paydown vs temporary top-up.
+      const subCategory =
+        s.category === "Money Movement" && needsBufferDecision(t.description, amount) ? "Needs review" : baseSubCategory;
       toInsert.push({
         date: t.date,
         amount,

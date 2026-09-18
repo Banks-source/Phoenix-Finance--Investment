@@ -24,8 +24,28 @@ body {
 }
 
 @layer components {
+  /* ---- Surfaces & layout (see DESIGN.md) ---- */
   .card {
     @apply rounded-xl border bg-white shadow-sm;
+  }
+  /* Small heading inside a card, e.g. "March budget" */
+  .section-title {
+    @apply text-sm font-semibold;
+  }
+  /* Uppercase micro-label above a number */
+  .label-caps {
+    @apply text-[11px] font-medium uppercase tracking-wide text-gray-500;
+  }
+  /* A tappable row inside a card — 44px+ tall for thumbs */
+  .row-link {
+    @apply flex items-center gap-3 px-4 py-3 transition-colors hover:bg-gray-50;
+  }
+  /* Positive/negative money colouring */
+  .money-pos {
+    @apply text-emerald-600;
+  }
+  .money-neg {
+    @apply text-rose-600;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors;
