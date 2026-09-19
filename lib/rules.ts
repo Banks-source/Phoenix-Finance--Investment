@@ -29,6 +29,7 @@ export const RULES: Rule[] = [
   // ---- Fees & interest charged -------------------------------------------
   { re: /NAB INTNL TRAN FEE|INTERNATIONAL TRANSACTION FEE/, category: "Fees", sub_category: "Intl fee", type: "bills_fixed" },
   { re: /INTEREST ON PURCHASE|INTEREST CHARGED|DEBIT INT RATE/, category: "Fees", sub_category: "Interest charged", type: "bills_fixed" },
+  { re: /LATE PAYMENT FEE/, category: "Fees", sub_category: "Late payment fee", type: "bills_fixed" },
 
   // ---- Debt repayments (creditors — see PRD known gap) --------------------
   // Ashby and Westpac here are transfers moving cash to fund a loan/redraw
@@ -58,6 +59,8 @@ export const RULES: Rule[] = [
   // Westpac Flexi Loan used as a buffer/redraw account — moving cash to/from
   // it is money movement, not a repayment. Its own interest/fees are captured
   // directly on the account (see the Fees rules above) and stay real costs.
+  // ING labels moves between its own accounts "INTERNAL TRANSFER ..."
+  { re: /^INTERNAL TRANSFER|INTERNAL TRANSFER (TO|FROM) LINKED/, category: "Money Movement", sub_category: "Internal transfer", type: "transfers" },
   { re: /WESTPAC PAYMENT|TFR FROM WESTPA|\bWITHDRAWAL\b/, category: "Money Movement", sub_category: "Internal transfer", type: "transfers" },
 
   // ---- Subscriptions / tech ----------------------------------------------

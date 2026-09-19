@@ -89,3 +89,19 @@ describe("ruleCategorise — loan/redraw buffer transfers vs the interest they f
     expect(result.type).toBe("bills_fixed");
   });
 });
+
+describe("ruleCategorise — ING loan account lines", () => {
+  it("treats ING internal transfers as Money Movement/transfers", () => {
+    for (const d of ["INTERNAL TRANSFER 923100 31083941", "INTERNAL TRANSFER TO LINKED ING ACCOUNT 923100 200411638"]) {
+      const r = ruleCategorise(d, "");
+      expect(r.category).toBe("Money Movement");
+      expect(r.type).toBe("transfers");
+    }
+  });
+
+  it("treats a bare late payment fee as a Fees expense", () => {
+    const r = ruleCategorise("LATE PAYMENT FEE", "");
+    expect(r.category).toBe("Fees");
+    expect(r.type).toBe("bills_fixed");
+  });
+});
