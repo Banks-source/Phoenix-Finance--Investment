@@ -254,21 +254,36 @@ export async function backfillTransactionDetails(since = "2026-01-01") {
 
   let updated = 0;
   const connections = await listConnections();
+  const accounts: RedbarkAccount[] = [];
   for (const conn of connections) {
     if (conn.status !== "active" || conn.category !== "banking") continue;
-    for (const acct of await listAccounts(conn.id)) {
-      const owner = ownerMap.get(acct.id);
-      if (!owner) continue;
-      for (const t of await listTransactions(acct.id, { from: since, includePending: false })) {
-        const signed = t.direction === "debit" ? -Math.abs(t.amount.amount) : Math.abs(t.amount.amount);
-        const key = `${t.date}|${signed / 100}|${t.description}|${owner}`;
-        const id = missing.get(key);
-        if (!id) continue;
-        const { error } = await supabase.from("transactions").update(redbarkDetailColumns(t)).eq("id", id);
-        if (error) throw new Error(`backfill update failed: ${error.message}`);
-        missing.delete(key);
-        updated++;
-      }
+    accounts.push(...(await listAccounts(conn.id)).filter((a) => ownerMap.has(a.id)));
+  }
+
+  // Accounts fetched in parallel, then updates applied in parallel chunks —
+  // sequential single-row updates were slow enough to time out the route.
+  const perAccount = await Promise.all(
+    accounts.map(async (acct) => ({ acct, txns: await listTransactions(acct.id, { from: since, includePending: false }) }))
+  );
+  const work: { id: string; cols: ReturnType<typeof redbarkDetailColumns> }[] = [];
+  for (const { acct, txns } of perAccount) {
+    const owner = ownerMap.get(acct.id);
+    for (const t of txns) {
+      const signed = t.direction === "debit" ? -Math.abs(t.amount.amount) : Math.abs(t.amount.amount);
+      const key = `${t.date}|${signed / 100}|${t.description}|${owner}`;
+      const id = missing.get(key);
+      if (!id) continue;
+      missing.delete(key);
+      work.push({ id, cols: redbarkDetailColumns(t) });
+    }
+  }
+  for (let i = 0; i < work.length; i += 25) {
+    const results = await Promise.all(
+      work.slice(i, i + 25).map((w) => supabase.from("transactions").update(w.cols).eq("id", w.id))
+    );
+    for (const r of results) {
+      if (r.error) throw new Error(`backfill update failed: ${r.error.message}`);
+      updated++;
     }
   }
   return { updated, unmatched: missing.size };
