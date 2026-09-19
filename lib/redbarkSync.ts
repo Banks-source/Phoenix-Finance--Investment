@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { listConnections, listAccounts, listTransactions, getBalance, RedbarkAccount } from "@/lib/redbark";
+import { listConnections, listAccounts, listTransactions, getBalance, RedbarkAccount, RedbarkTransaction } from "@/lib/redbark";
 import { categoriseSync, MerchantRule } from "@/lib/categorise";
 import { classifyMoneyMovement, extractAccountDigits, needsBufferDecision } from "@/lib/transferClassification";
 import { resolveIncomeSubCategory, Owner } from "@/lib/incomeClassification";
@@ -11,6 +11,41 @@ export type RedbarkSyncResult = {
   perAccount: { accountId: string; name: string; imported: number }[];
   balanceErrors: { name: string; message: string }[];
 };
+
+export const DETAIL_COLUMNS = [
+  "bank_txn_id",
+  "posted_at",
+  "post_date",
+  "reference",
+  "extended_description",
+  "provider_category",
+  "merchant_category_code",
+  "bank_status",
+] as const;
+
+/** The extra Redbark fields we keep on each transaction for the detail view. */
+export function redbarkDetailColumns(t: RedbarkTransaction) {
+  return {
+    bank_txn_id: t.id,
+    posted_at: t.post_datetime ?? t.datetime ?? null,
+    post_date: t.post_date ?? null,
+    reference: t.reference ?? null,
+    extended_description: t.extended_description ?? null,
+    provider_category: t.provider_category ?? null,
+    merchant_category_code: t.merchant_category_code ?? null,
+    bank_status: t.status ?? null,
+  };
+}
+
+function stripDetailColumns(row: Record<string, unknown>) {
+  const out = { ...row };
+  for (const c of DETAIL_COLUMNS) delete out[c];
+  return out;
+}
+
+function isMissingColumn(error: { code?: string }): boolean {
+  return error.code === "42703" || error.code === "PGRST204";
+}
 
 const OVERLAP_DAYS = 3; // re-fetch a few days of overlap so a slow-settling transaction isn't missed
 
@@ -146,11 +181,16 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
         status: "pending_review", // always — no silent auto-categorisation
         confidence: s.confidence,
         source: "bank_import",
+        ...redbarkDetailColumns(t),
       });
     }
 
     if (toInsert.length > 0) {
-      const { error } = await supabase.from("transactions").insert(toInsert);
+      let { error } = await supabase.from("transactions").insert(toInsert);
+      // Migration 0018 (detail columns) not applied yet — import without them.
+      if (error && isMissingColumn(error)) {
+        ({ error } = await supabase.from("transactions").insert(toInsert.map(stripDetailColumns)));
+      }
       if (error) throw new Error(`transactions insert failed: ${error.message}`);
     }
 
@@ -186,4 +226,50 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
   }
 
   return result;
+}
+
+/**
+ * One-off: fills the detail columns on transactions imported before migration
+ * 0018. Matches on the same date|amount|detail|owner key the importer dedups
+ * with; only touches rows that don't have a bank_txn_id yet.
+ */
+export async function backfillTransactionDetails(since = "2026-01-01") {
+  const supabase = createServiceClient();
+  const { data: ownerRows } = await supabase.from("redbark_account_owners").select("redbark_account_id, owner");
+  const ownerMap = new Map((ownerRows ?? []).map((r) => [r.redbark_account_id, r.owner]));
+
+  const missing = new Map<string, string>(); // key -> transaction id
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("id, date, amount, detail, owner")
+      .is("bank_txn_id", null)
+      .eq("source", "bank_import")
+      .gte("date", since)
+      .range(from, from + 999);
+    if (error) throw new Error(`backfill fetch failed: ${error.message}`);
+    for (const r of data ?? []) missing.set(`${r.date}|${r.amount}|${r.detail}|${r.owner}`, r.id);
+    if (!data || data.length < 1000) break;
+  }
+
+  let updated = 0;
+  const connections = await listConnections();
+  for (const conn of connections) {
+    if (conn.status !== "active" || conn.category !== "banking") continue;
+    for (const acct of await listAccounts(conn.id)) {
+      const owner = ownerMap.get(acct.id);
+      if (!owner) continue;
+      for (const t of await listTransactions(acct.id, { from: since, includePending: false })) {
+        const signed = t.direction === "debit" ? -Math.abs(t.amount.amount) : Math.abs(t.amount.amount);
+        const key = `${t.date}|${signed / 100}|${t.description}|${owner}`;
+        const id = missing.get(key);
+        if (!id) continue;
+        const { error } = await supabase.from("transactions").update(redbarkDetailColumns(t)).eq("id", id);
+        if (error) throw new Error(`backfill update failed: ${error.message}`);
+        missing.delete(key);
+        updated++;
+      }
+    }
+  }
+  return { updated, unmatched: missing.size };
 }

@@ -50,6 +50,13 @@ export type RedbarkTransaction = {
   provider_category: string | null;
   category: string | null;
   merchant_name: string | null;
+  // Extra detail Redbark returns — optional so older payloads/tests still type-check.
+  datetime?: string | null;
+  post_date?: string | null;
+  post_datetime?: string | null;
+  reference?: string | null;
+  extended_description?: string | null;
+  merchant_category_code?: string | null;
 };
 
 type RedbarkList<T> = {

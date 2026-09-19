@@ -42,6 +42,16 @@ export interface Txn {
   tax_category?: string | null;
   tax_note?: string | null;
   entity_id?: string | null;
+  account_id?: string | null;
+  // Redbark detail (migration 0018) — null on rows imported before it.
+  bank_txn_id?: string | null;
+  posted_at?: string | null;
+  post_date?: string | null;
+  reference?: string | null;
+  extended_description?: string | null;
+  provider_category?: string | null;
+  merchant_category_code?: string | null;
+  bank_status?: string | null;
 }
 
 /** Distinct dates across the whole store — used to build the period dropdown. */

@@ -5,7 +5,7 @@ import { Txn } from "@/lib/queries";
 import { CATEGORIES } from "@/lib/taxonomy";
 import { money } from "@/lib/format";
 import { TypeBadge } from "@/components/ui";
-import { Check, CheckCheck, ChevronDown, ChevronRight, Undo2, X } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, ChevronRight, Undo2, X, ArrowRight } from "lucide-react";
 
 async function post(body: unknown) {
   await fetch("/api/review", {
@@ -15,9 +15,20 @@ async function post(body: unknown) {
   });
 }
 
-export default function ReviewQueue({ rows, allSubCategories = [] }: { rows: Txn[]; allSubCategories?: string[] }) {
+type Flow = { from: string | null; to: string | null };
+
+export default function ReviewQueue({
+  rows,
+  allSubCategories = [],
+  flows = {},
+}: {
+  rows: Txn[];
+  allSubCategories?: string[];
+  flows?: Record<string, Flow>;
+}) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [open, setOpen] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [bulkCat, setBulkCat] = useState("");
   const [bulkSub, setBulkSub] = useState("");
@@ -273,6 +284,7 @@ export default function ReviewQueue({ rows, allSubCategories = [] }: { rows: Txn
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">{t.merchant || t.detail}</div>
                       <div className="truncate text-xs text-gray-400">{t.owner} · {t.detail}</div>
+                      <FlowLine flow={flows[t.id]} />
                     </div>
                     <div className={`w-24 shrink-0 text-right text-sm tabular font-medium ${t.amount < 0 ? "" : "text-emerald-600"}`}>
                       {money(t.amount, { decimals: true, sign: true })}
@@ -304,6 +316,15 @@ export default function ReviewQueue({ rows, allSubCategories = [] }: { rows: Txn
                     >
                       <Check size={15} />
                     </button>
+                    <button
+                      className="btn-ghost !px-2"
+                      onClick={() => setOpen(open === t.id ? null : t.id)}
+                      title="Details"
+                      aria-expanded={open === t.id}
+                    >
+                      {open === t.id ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                    </button>
+                    {open === t.id && <TxnDetail t={t} flow={flows[t.id]} />}
                   </div>
                 ))}
               </div>
@@ -331,5 +352,66 @@ function SubInput({ value, onCommit }: { value: string; onCommit: (v: string) =>
       }}
       onBlur={() => onCommit(v.trim())}
     />
+  );
+}
+
+function FlowLine({ flow }: { flow?: Flow }) {
+  if (!flow || (!flow.from && !flow.to)) return null;
+  return (
+    <div className="mt-0.5 flex items-center gap-1 truncate text-xs text-indigo-600">
+      <span className="truncate">{flow.from ?? "External"}</span>
+      {flow.to && (
+        <>
+          <ArrowRight size={11} className="shrink-0" />
+          <span className="truncate">{flow.to}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function fmt(v: string | null | undefined, kind?: "datetime") {
+  if (!v) return null;
+  if (kind === "datetime") {
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? v : d.toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
+  }
+  return v;
+}
+
+// Everything we hold about the transaction, for when the one-line row isn't enough.
+function TxnDetail({ t, flow }: { t: Txn; flow?: Flow }) {
+  const fields: [string, string | null | undefined][] = [
+    ["From account", flow?.from],
+    ["To account", flow?.to],
+    ["Description", t.detail],
+    ["Extended description", t.extended_description],
+    ["Merchant", t.merchant],
+    ["Reference", t.reference],
+    ["Posted", fmt(t.posted_at, "datetime")],
+    ["Transaction date", t.date],
+    ["Bank category", t.provider_category],
+    ["Merchant category code", t.merchant_category_code],
+    ["Bank status", t.bank_status],
+    ["Owner", t.owner],
+    ["Direction", t.transaction_type],
+    ["Category", [t.category, t.sub_category].filter(Boolean).join(" › ")],
+    ["Confidence", t.confidence != null ? `${Math.round(Number(t.confidence) * 100)}%` : null],
+    ["Source", t.source],
+    ["Bank transaction ID", t.bank_txn_id],
+  ];
+  const shown = fields.filter(([, v]) => v);
+  return (
+    <dl className="grid basis-full grid-cols-1 gap-x-6 gap-y-2 rounded-lg bg-gray-50 p-3 text-xs sm:grid-cols-2">
+      {shown.map(([k, v]) => (
+        <div key={k} className="min-w-0">
+          <dt className="label-caps">{k}</dt>
+          <dd className="break-words text-gray-800">{v}</dd>
+        </div>
+      ))}
+      {!t.bank_txn_id && (
+        <p className="col-span-full text-gray-400">Bank detail (reference, posted time, bank category) appears once this row is backfilled.</p>
+      )}
+    </dl>
   );
 }
