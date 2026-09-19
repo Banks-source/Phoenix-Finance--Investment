@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchTransactions, findDuplicateExtras, RbTxn, DbTxn } from "./reconcileMatch";
+import { matchTransactions, RbTxn, DbTxn } from "./reconcileMatch";
 
 const rb = (id: string, date: string, amount: number, accountId: string | null = "a1"): RbTxn => ({ id, date, amount, accountId });
 const db = (id: string, date: string, amount: number, extra: Partial<DbTxn> = {}): DbTxn => ({
@@ -50,15 +50,5 @@ describe("matchTransactions", () => {
   it("reports stored rows with no bank counterpart", () => {
     const r = matchTransactions([], [db("d1", "2026-03-05", -5)]);
     expect(r.unmatchedDb).toHaveLength(1);
-  });
-});
-
-describe("findDuplicateExtras", () => {
-  const row = (id: string, amount = -20.12, detail = "LINKT") => ({ id, owner: "lloyd", date: "2026-01-02", amount, detail });
-  it("returns every copy after the first", () => {
-    expect(findDuplicateExtras([row("a"), row("b"), row("c")]).map((r) => r.id)).toEqual(["b", "c"]);
-  });
-  it("ignores rows that differ in amount or description", () => {
-    expect(findDuplicateExtras([row("a"), row("b", -5), row("c", -20.12, "OTHER")])).toEqual([]);
   });
 });

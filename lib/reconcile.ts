@@ -3,7 +3,7 @@ import { listConnections, listAccounts, listTransactions, RedbarkAccount } from 
 import { extractAccountDigits } from "@/lib/transferClassification";
 import { MerchantRule } from "@/lib/categorise";
 import { buildImportRow, redbarkAmount, redbarkDetailColumns, isMissingColumn, stripDetailColumns } from "@/lib/redbarkSync";
-import { matchTransactions, findDuplicateExtras, RbTxn, DbTxn } from "@/lib/reconcileMatch";
+import { matchTransactions, RbTxn, DbTxn } from "@/lib/reconcileMatch";
 
 export const RECONCILE_FROM = "2026-01-01";
 // Statement imports can be dated a few days off the bank's date, so look a
@@ -13,7 +13,6 @@ const BANK_LOOKBACK = "2025-12-20";
 export const REASONS = {
   missing: "In your bank feed but missing from your records",
   orphan: "In your records but not found in your bank feed",
-  duplicate: "Possible duplicate — same date, amount and description as another row",
 } as const;
 
 export type ReconcileResult = {
@@ -26,8 +25,7 @@ export type ReconcileResult = {
   missingInDb: number;
   missingByMonth: Record<string, number>;
   orphans: number;
-  duplicates: number;
-  samples: { missing: string[]; orphans: string[]; duplicates: string[] };
+  samples: { missing: string[]; orphans: string[] };
 };
 
 async function fetchAllDb(supabase: ReturnType<typeof createServiceClient>, cols: string) {
@@ -99,8 +97,6 @@ export async function runReconciliation({ apply }: { apply: boolean }): Promise<
   const missing = missingInDb.filter((t) => t.date >= RECONCILE_FROM);
   const today = new Date().toISOString().slice(0, 10);
   const orphans = unmatchedDb.filter((r) => r.source !== "manual" && r.date <= today);
-  const dupExtras = findDuplicateExtras(dbRows).filter((r) => r.source !== "manual");
-  const dupIds = new Set(dupExtras.map((r) => r.id));
   const linkable = matches.filter((m) => !m.byId);
 
   const missingByMonth: Record<string, number> = {};
@@ -117,11 +113,9 @@ export async function runReconciliation({ apply }: { apply: boolean }): Promise<
     missingInDb: missing.length,
     missingByMonth,
     orphans: orphans.length,
-    duplicates: dupExtras.length,
     samples: {
       missing: missing.slice(0, 8).map((t) => describe(t.date, t.amount, bankById.get(t.id)?.t.description)),
       orphans: orphans.slice(0, 8).map((r) => describe(r.date, r.amount, r.detail)),
-      duplicates: dupExtras.slice(0, 8).map((r) => describe(r.date, r.amount, r.detail)),
     },
   };
   if (!apply) return result;
@@ -159,7 +153,9 @@ export async function runReconciliation({ apply }: { apply: boolean }): Promise<
     if (error) throw new Error(`insert failed: ${error.message}`);
   }
 
-  // ---- apply: flag suspect rows for review
+  // ---- apply: flag stored rows the bank has no record of. (Repeated identical
+  // rows aren't flagged as duplicates: matching is one-to-one, so each has its
+  // own bank transaction — a stored copy with none would show up here.)
   const flag = async (ids: string[], reason: string) => {
     for (let i = 0; i < ids.length; i += 200) {
       const { error } = await supabase
@@ -169,8 +165,7 @@ export async function runReconciliation({ apply }: { apply: boolean }): Promise<
       if (error) throw new Error(`flag update failed: ${error.message}`);
     }
   };
-  await flag(orphans.filter((r) => !dupIds.has(r.id)).map((r) => r.id), REASONS.orphan);
-  await flag([...dupIds], REASONS.duplicate);
+  await flag(orphans.map((r) => r.id), REASONS.orphan);
 
   return result;
 }

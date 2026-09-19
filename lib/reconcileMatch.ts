@@ -72,17 +72,3 @@ export function matchTransactions<D extends DbTxn>(rb: RbTxn[], db: D[], maxShif
 
   return { matches, missingInDb, unmatchedDb: db.filter((r) => !used.has(r.id)) };
 }
-
-/** Rows that look like the same transaction entered twice; returns the extras. */
-export function findDuplicateExtras<T extends { id: string; owner: string; date: string; amount: number; detail: string | null }>(
-  rows: T[]
-): T[] {
-  const seen = new Map<string, T>();
-  const extras: T[] = [];
-  for (const r of [...rows].sort((a, b) => a.id.localeCompare(b.id))) {
-    const key = `${r.owner}|${r.date}|${cents(r.amount)}|${r.detail ?? ""}`;
-    if (seen.has(key)) extras.push(r);
-    else seen.set(key, r);
-  }
-  return extras;
-}
