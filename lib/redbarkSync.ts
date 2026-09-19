@@ -11,6 +11,8 @@ export type RedbarkSyncResult = {
   perAccount: { accountId: string; name: string; imported: number }[];
   balanceErrors: { name: string; message: string }[];
   // Which connections the API key can see, and how many accounts each returned.
+  // Last 4 chars of the key and the API version in use, to spot env mismatches.
+  credentials: { keySuffix: string; version: string | null };
   connections: { name: string; status: string; category: string; accounts: number }[];
 };
 
@@ -109,6 +111,10 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
     unmappedAccounts: [],
     perAccount: [],
     balanceErrors: [],
+    credentials: {
+      keySuffix: (process.env.REDBARK_API_KEY ?? "").slice(-4),
+      version: process.env.REDBARK_API_VERSION ?? null,
+    },
     connections: connectionsSeen,
   };
 
