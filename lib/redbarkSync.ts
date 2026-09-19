@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { listConnections, listAccounts, listTransactions, getBalance, RedbarkAccount, RedbarkTransaction } from "@/lib/redbark";
 import { categoriseSync, MerchantRule } from "@/lib/categorise";
 import { classifyMoneyMovement, extractAccountDigits, needsBufferDecision } from "@/lib/transferClassification";
+import { applyIngLoanCategory } from "@/lib/ingProperty";
 import { resolveIncomeSubCategory, Owner } from "@/lib/incomeClassification";
 
 export type RedbarkSyncResult = {
@@ -171,7 +172,11 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
         continue;
       }
       seen.add(key);
-      const s = categoriseSync(t.merchant_name ?? t.description, t.description, merchantRules, t.provider_category);
+      const s = applyIngLoanCategory(
+        acct.institution.name,
+        categoriseSync(t.merchant_name ?? t.description, t.description, merchantRules, t.provider_category),
+        t.description
+      );
       // "Money Movement" alone doesn't say whether the money stayed in the
       // household or actually left it — classify that direction here, on
       // the raw bank description, rather than guessing later with less context.

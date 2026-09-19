@@ -64,11 +64,14 @@ export const CONSOLIDATION_RULES: Record<string, SubCategoryRule[]> = {
   ],
 
   Fees: [
-    { re: /INTEREST CHARGE.*ASHBY|ASHBY.*INTEREST CHARGE/, sub: "Ashby Loan Interest" },
-    { re: /ASHBY.*LATE PAYMENT FEE|LATE PAYMENT FEE.*ASHBY|ING LOAN LATE PAYMENT FEE/, sub: "Ashby Loan Fees" },
     { re: /INTNL TRAN FEE|INTERNATIONAL TRANSACTION FEE/, sub: "International Fee" },
     { re: /INTEREST ON PURCHASE|INTEREST.*BASE PLAN|DEBIT EXCESS INTEREST|DEBIT INT RATE|INTEREST CHARGED/, sub: "Interest Charged" },
     { re: /LOAN ACCOUNT FEE|OVERDRAW FEE|ACCOUNT FEE/, sub: "Account Fee" },
+  ],
+
+  "Property Interest (ING)": [
+    { re: /LATE PAYMENT FEE|\bFEE\b/, sub: "Loan Fees" },
+    { re: /INTEREST/, sub: "Loan Interest" },
   ],
 
   Health: [
@@ -143,6 +146,7 @@ export const CONSOLIDATION_FALLBACK: Record<string, string> = {
   "Car & Transport": "Other",
   Subscriptions: "Other",
   Fees: "Other",
+  "Property Interest (ING)": "Loan Interest",
   Health: "Other",
   Insurance: "Other",
   Investment: "Other",
