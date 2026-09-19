@@ -50,11 +50,11 @@ describe("ruleCategorise — bill payments made via BPAY/transfer", () => {
 });
 
 describe("ruleCategorise — loan/redraw buffer transfers vs the interest they fund", () => {
-  it("categorises an Ashby investment-loan transfer as Investment/transfers, not debt (interest is the real cost, tracked separately)", () => {
+  it("categorises an Ashby investment-loan transfer as an Investment expense (its credit leg on the loan side cancels it)", () => {
     const result = ruleCategorise("Transfer To milani CommBank App Ashby loan", "");
     expect(result.category).toBe("Investment");
-    expect(result.sub_category).toBe("Ashby Loan");
-    expect(result.type).toBe("transfers");
+    expect(result.sub_category).toBe("Loan Repayment");
+    expect(result.type).toBe("bills_fixed");
   });
 
   it("categorises a Westpac Flexi Loan buffer payment as Money Movement/transfers, not debt", () => {
@@ -77,14 +77,14 @@ describe("ruleCategorise — loan/redraw buffer transfers vs the interest they f
 
   it("counts the Ashby loan's interest charge as a Fees expense, unlike the principal transfer", () => {
     const result = ruleCategorise("Interest Charge — Ashby INV loan 200411638", "");
-    expect(result.category).toBe("Property Interest (ING)");
+    expect(result.category).toBe("Investment");
     expect(result.sub_category).toBe("Loan Interest");
     expect(result.type).toBe("bills_fixed");
   });
 
   it("counts an ING loan late payment fee as a Fees expense", () => {
     const result = ruleCategorise("ING loan late payment fee", "");
-    expect(result.category).toBe("Property Interest (ING)");
+    expect(result.category).toBe("Investment");
     expect(result.sub_category).toBe("Loan Fees");
     expect(result.type).toBe("bills_fixed");
   });

@@ -42,13 +42,66 @@ export function redbarkDetailColumns(t: RedbarkTransaction) {
   };
 }
 
-function stripDetailColumns(row: Record<string, unknown>) {
+
+/** Redbark amounts are unsigned minor units (cents) plus a direction; ours are signed dollars. */
+export function redbarkAmount(t: RedbarkTransaction): number {
+  const signed = t.direction === "debit" ? -Math.abs(t.amount.amount) : Math.abs(t.amount.amount);
+  return signed / 100;
+}
+
+export interface ImportContext {
+  institution: string;
+  owner: string;
+  accountId: string;
+  merchantRules: MerchantRule[];
+  ourAccountDigits: string[];
+}
+
+/** The transactions row for one Redbark transaction — always lands in review. */
+export function buildImportRow(t: RedbarkTransaction, ctx: ImportContext) {
+  const amount = redbarkAmount(t);
+  const s = applyIngLoanCategory(
+    ctx.institution,
+    categoriseSync(t.merchant_name ?? t.description, t.description, ctx.merchantRules, t.provider_category),
+    t.description
+  );
+  // "Money Movement" alone doesn't say whether the money stayed in the
+  // household or actually left it — classify that direction here, on
+  // the raw bank description, rather than guessing later with less context.
+  const baseSubCategory =
+    s.category === "Money Movement" && !s.sub_category
+      ? classifyMoneyMovement(t.description, ctx.ourAccountDigits) ?? s.sub_category
+      : s.category === "Income"
+        ? resolveIncomeSubCategory(t.description, ctx.owner as Owner)
+        : s.sub_category;
+  // Big Westpac buffer moves need a human call: paydown vs temporary top-up.
+  const subCategory =
+    s.category === "Money Movement" && needsBufferDecision(t.description, amount) ? "Needs review" : baseSubCategory;
+  return {
+    date: t.date,
+    amount,
+    account_id: ctx.accountId,
+    owner: ctx.owner,
+    transaction_type: t.direction,
+    detail: t.description,
+    merchant: t.merchant_name ?? t.description,
+    category: s.category,
+    sub_category: subCategory,
+    type: s.type,
+    status: "pending_review", // always — no silent auto-categorisation
+    confidence: s.confidence,
+    source: "bank_import",
+    ...redbarkDetailColumns(t),
+  };
+}
+
+export function stripDetailColumns(row: Record<string, unknown>) {
   const out = { ...row };
   for (const c of DETAIL_COLUMNS) delete out[c];
   return out;
 }
 
-function isMissingColumn(error: { code?: string }): boolean {
+export function isMissingColumn(error: { code?: string }): boolean {
   return error.code === "42703" || error.code === "PGRST204";
 }
 
@@ -164,47 +217,16 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
     const txns = await listTransactions(acct.id, { from, includePending: false });
     const toInsert: any[] = [];
     for (const t of txns) {
-      const signedAmount = t.direction === "debit" ? -Math.abs(t.amount.amount) : Math.abs(t.amount.amount);
-      const amount = signedAmount / 100; // Redbark amounts are in minor units (cents)
+      const amount = redbarkAmount(t);
       const key = `${t.date}|${amount}|${t.description}|${owner}`;
       if (seen.has(key) || (owner === "joint" && seenAnyOwner.has(`${t.date}|${amount}|${t.description}`))) {
         result.skippedDuplicates++;
         continue;
       }
       seen.add(key);
-      const s = applyIngLoanCategory(
-        acct.institution.name,
-        categoriseSync(t.merchant_name ?? t.description, t.description, merchantRules, t.provider_category),
-        t.description
+      toInsert.push(
+        buildImportRow(t, { institution: acct.institution.name, owner, accountId, merchantRules, ourAccountDigits })
       );
-      // "Money Movement" alone doesn't say whether the money stayed in the
-      // household or actually left it — classify that direction here, on
-      // the raw bank description, rather than guessing later with less context.
-      const baseSubCategory =
-        s.category === "Money Movement" && !s.sub_category
-          ? classifyMoneyMovement(t.description, ourAccountDigits) ?? s.sub_category
-          : s.category === "Income"
-            ? resolveIncomeSubCategory(t.description, owner as Owner)
-            : s.sub_category;
-      // Big Westpac buffer moves need a human call: paydown vs temporary top-up.
-      const subCategory =
-        s.category === "Money Movement" && needsBufferDecision(t.description, amount) ? "Needs review" : baseSubCategory;
-      toInsert.push({
-        date: t.date,
-        amount,
-        account_id: accountId,
-        owner,
-        transaction_type: t.direction,
-        detail: t.description,
-        merchant: t.merchant_name ?? t.description,
-        category: s.category,
-        sub_category: subCategory,
-        type: s.type,
-        status: "pending_review", // always — no silent auto-categorisation
-        confidence: s.confidence,
-        source: "bank_import",
-        ...redbarkDetailColumns(t),
-      });
     }
 
     if (toInsert.length > 0) {

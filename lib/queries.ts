@@ -52,6 +52,7 @@ export interface Txn {
   provider_category?: string | null;
   merchant_category_code?: string | null;
   bank_status?: string | null;
+  review_reason?: string | null;
 }
 
 /** Distinct dates across the whole store — used to build the period dropdown. */

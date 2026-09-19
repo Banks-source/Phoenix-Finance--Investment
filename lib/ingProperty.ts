@@ -1,6 +1,6 @@
 import type { CategorySuggestion } from "@/lib/categorise";
 
-export const ING_PROPERTY_CATEGORY = "Property Interest (ING)";
+export const ING_PROPERTY_CATEGORY = "Investment";
 
 /**
  * Interest and fees charged on the ING investment loan get their own root

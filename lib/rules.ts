@@ -40,12 +40,12 @@ export const RULES: Rule[] = [
   // principal-transfer rule below, or it'd get swallowed as "Ashby Loan" and
   // silently drop out of the interest total the dashboard surfaces as a cost.
   // Interest and fees on the ING/Ashby loan are the real cost of the loan, so
-  // they're expenses (Property Interest (ING)); only the principal transfers below stay out.
-  { re: /INTEREST CHARGE.*ASHBY|ASHBY.*INTEREST CHARGE/, category: "Property Interest (ING)", sub_category: "Loan Interest", type: "bills_fixed" },
-  { re: /ASHBY.*LATE PAYMENT FEE|LATE PAYMENT FEE.*ASHBY|ING LOAN LATE PAYMENT FEE/, category: "Property Interest (ING)", sub_category: "Loan Fees", type: "bills_fixed" },
+  // they're expenses under Investment, alongside the repayment legs.
+  { re: /INTEREST CHARGE.*ASHBY|ASHBY.*INTEREST CHARGE/, category: "Investment", sub_category: "Loan Interest", type: "bills_fixed" },
+  { re: /ASHBY.*LATE PAYMENT FEE|LATE PAYMENT FEE.*ASHBY|ING LOAN LATE PAYMENT FEE/, category: "Investment", sub_category: "Loan Fees", type: "bills_fixed" },
   // Generic fallback — must stay below the Ashby-specific fee rule above.
   { re: /LATE PAYMENT FEE/, category: "Fees", sub_category: "Late payment fee", type: "bills_fixed" },
-  { re: /ASHBY LOAN/, category: "Investment", sub_category: "Ashby Loan", type: "transfers" },
+  { re: /ASHBY LOAN/, category: "Investment", sub_category: "Loan Repayment", type: "bills_fixed" },
   { re: /ZIPMONEY|ZIP MONEY/, category: "Money Movement", sub_category: "ZipMoney", type: "debt" },
 
   // ---- Transfers / money movement (unambiguous only) ----------------------
@@ -100,7 +100,7 @@ export const RULES: Rule[] = [
   { re: /TMR OFFENCE|OFFENCE|INFRINGEMENT|FINE\b|PENALTY/, category: "Fines", type: "spending" },
   { re: /TATTS|THE LOTT|SPORTSBET|LADBROKES|BET365|TAB\b|POINTSBET/, category: "Gambling", type: "spending" },
   { re: /CENTRELINK|CLINK DIR DEBIT/, category: "Money Movement", sub_category: "Centrelink", type: "transfers" },
-  { re: /ASIC|AUSTRALIAN SECURITIES|VIC PROPERTY CERTS|LANDATA|LAND TAX|GOVERNMENT/, category: "Investment", sub_category: "Property/gov", type: "transfers" },
+  { re: /ASIC|AUSTRALIAN SECURITIES|VIC PROPERTY CERTS|LANDATA|LAND TAX|GOVERNMENT/, category: "Investment", sub_category: "Property/gov", type: "bills_fixed" },
 
   // ---- Groceries ----------------------------------------------------------
   { re: /WOOLWORTHS|WOOLIES|COLES|ALDI|IGA\b|WHITES IGA|FOODWORKS|BUDDSBUTCHERS|MT COOLUM MEATS|MEATS|BUTCHER|HEIRLOOM WHOLEFOOD|BAKERY|EZYMART|CANTALOUPE/, category: "Groceries", type: "spending" },

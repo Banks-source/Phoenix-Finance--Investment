@@ -285,6 +285,11 @@ export default function ReviewQueue({
                       <div className="truncate text-sm font-medium">{t.merchant || t.detail}</div>
                       <div className="truncate text-xs text-gray-400">{t.owner} · {t.detail}</div>
                       <FlowLine flow={flows[t.id]} />
+                      {t.review_reason && (
+                        <div className="mt-0.5 truncate text-xs text-amber-600" title={t.review_reason}>
+                          ⚑ {t.review_reason}
+                        </div>
+                      )}
                     </div>
                     <div className={`w-24 shrink-0 text-right text-sm tabular font-medium ${t.amount < 0 ? "" : "text-emerald-600"}`}>
                       {money(t.amount, { decimals: true, sign: true })}
@@ -393,6 +398,7 @@ function TxnDetail({ t, flow }: { t: Txn; flow?: Flow }) {
     ["Bank category", t.provider_category],
     ["Merchant category code", t.merchant_category_code],
     ["Bank status", t.bank_status],
+    ["Why it's in review", t.review_reason],
     ["Owner", t.owner],
     ["Direction", t.transaction_type],
     ["Category", [t.category, t.sub_category].filter(Boolean).join(" › ")],

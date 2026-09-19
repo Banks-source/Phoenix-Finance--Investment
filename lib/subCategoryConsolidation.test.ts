@@ -97,11 +97,11 @@ describe("deriveConsolidatedSubCategory — Kids, Car & Transport, Subscriptions
   });
 
   it("classifies Investment merchants, keeping the loan's interest/fees distinct from principal", () => {
-    expect(d("Investment", "Transfer To milani CommBank App Ashby loan")).toBe("Ashby Loan");
-    expect(deriveConsolidatedSubCategory("Property Interest (ING)", null, "Interest Charge — Ashby INV loan 200411638")).toBe(
+    expect(d("Investment", "Transfer To milani CommBank App Ashby loan")).toBe("Loan Repayment");
+    expect(deriveConsolidatedSubCategory("Investment", null, "Interest Charge — Ashby INV loan 200411638")).toBe(
       "Loan Interest"
     );
-    expect(d("Property Interest (ING)", "ING loan late payment fee")).toBe("Loan Fees");
+    expect(d("Investment", "ING loan late payment fee")).toBe("Loan Fees");
     expect(d("Investment", "Hobsons Bay City Council")).toBe("Property Rates & Government");
   });
 });

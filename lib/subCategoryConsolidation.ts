@@ -69,11 +69,6 @@ export const CONSOLIDATION_RULES: Record<string, SubCategoryRule[]> = {
     { re: /LOAN ACCOUNT FEE|OVERDRAW FEE|ACCOUNT FEE/, sub: "Account Fee" },
   ],
 
-  "Property Interest (ING)": [
-    { re: /LATE PAYMENT FEE|\bFEE\b/, sub: "Loan Fees" },
-    { re: /INTEREST/, sub: "Loan Interest" },
-  ],
-
   Health: [
     { re: /MEDICARE|MCARE/, sub: "Medicare" },
     { re: /PHARMACY|CHEMIST|PRICELINE|LIVELIFE/, sub: "Pharmacy" },
@@ -89,7 +84,9 @@ export const CONSOLIDATION_RULES: Record<string, SubCategoryRule[]> = {
   ],
 
   Investment: [
-    { re: /ASHBY/, sub: "Ashby Loan" },
+    { re: /LATE PAYMENT FEE/, sub: "Loan Fees" },
+    { re: /INTEREST CHARGE/, sub: "Loan Interest" },
+    { re: /ASHBY/, sub: "Loan Repayment" },
     { re: /CITY COUNCIL|LANDATA|DEPARTMENT OF ENVIRONMENT|LAND TAX|ASIC|AUSTRALIAN SECURITIES/, sub: "Property Rates & Government" },
   ],
 
@@ -146,7 +143,6 @@ export const CONSOLIDATION_FALLBACK: Record<string, string> = {
   "Car & Transport": "Other",
   Subscriptions: "Other",
   Fees: "Other",
-  "Property Interest (ING)": "Loan Interest",
   Health: "Other",
   Insurance: "Other",
   Investment: "Other",

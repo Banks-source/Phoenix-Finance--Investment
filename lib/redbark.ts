@@ -89,17 +89,25 @@ async function redbarkRequest<T>(path: string, params?: Record<string, string | 
     if (v !== undefined) url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Redbark-Version": apiVersion,
-    },
-    // Never serve a cached copy: Next's data cache survives redeploys, and a
-    // stale connections/accounts list hides newly connected banks.
-    cache: "no-store",
-  });
-
-  const json = await res.json();
+  // Redbark rate-limits bursts (429 rate_limit_exceeded) — wait and retry
+  // rather than failing a whole sync or reconciliation.
+  let res: Response;
+  let json: any;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Redbark-Version": apiVersion,
+      },
+      // Never serve a cached copy: Next's data cache survives redeploys, and a
+      // stale connections/accounts list hides newly connected banks.
+      cache: "no-store",
+    });
+    json = await res.json();
+    if (res.status !== 429 || attempt >= 5) break;
+    const wait = Number(res.headers.get("retry-after")) * 1000 || 5000 * (attempt + 1);
+    await new Promise((r) => setTimeout(r, Math.min(wait, 45000)));
+  }
   if (!res.ok) {
     throw new RedbarkApiError(json?.error?.message ?? `Redbark API request failed (${res.status})`, json?.error?.code, res.status);
   }
