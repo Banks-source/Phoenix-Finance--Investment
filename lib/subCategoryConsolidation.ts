@@ -64,6 +64,8 @@ export const CONSOLIDATION_RULES: Record<string, SubCategoryRule[]> = {
   ],
 
   Fees: [
+    { re: /INTEREST CHARGE.*ASHBY|ASHBY.*INTEREST CHARGE/, sub: "Ashby Loan Interest" },
+    { re: /ASHBY.*LATE PAYMENT FEE|LATE PAYMENT FEE.*ASHBY|ING LOAN LATE PAYMENT FEE/, sub: "Ashby Loan Fees" },
     { re: /INTNL TRAN FEE|INTERNATIONAL TRANSACTION FEE/, sub: "International Fee" },
     { re: /INTEREST ON PURCHASE|INTEREST.*BASE PLAN|DEBIT EXCESS INTEREST|DEBIT INT RATE|INTEREST CHARGED/, sub: "Interest Charged" },
     { re: /LOAN ACCOUNT FEE|OVERDRAW FEE|ACCOUNT FEE/, sub: "Account Fee" },
@@ -84,8 +86,6 @@ export const CONSOLIDATION_RULES: Record<string, SubCategoryRule[]> = {
   ],
 
   Investment: [
-    { re: /INTEREST CHARGE.*ASHBY|ASHBY.*INTEREST CHARGE/, sub: "Ashby Loan Interest" },
-    { re: /ASHBY.*LATE PAYMENT FEE|LATE PAYMENT FEE.*ASHBY|ING LOAN LATE PAYMENT FEE/, sub: "Ashby Loan Fees" },
     { re: /ASHBY/, sub: "Ashby Loan" },
     { re: /CITY COUNCIL|LANDATA|DEPARTMENT OF ENVIRONMENT|LAND TAX|ASIC|AUSTRALIAN SECURITIES/, sub: "Property Rates & Government" },
   ],

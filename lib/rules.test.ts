@@ -75,10 +75,17 @@ describe("ruleCategorise — loan/redraw buffer transfers vs the interest they f
     expect(result.type).toBe("bills_fixed");
   });
 
-  it("keeps the Ashby loan's interest charge distinct from the principal transfer, so it isn't dropped from the interest total", () => {
+  it("counts the Ashby loan's interest charge as a Fees expense, unlike the principal transfer", () => {
     const result = ruleCategorise("Interest Charge — Ashby INV loan 200411638", "");
-    expect(result.category).toBe("Investment");
-    expect(result.sub_category).toBe("Ashby loan interest");
-    expect(result.type).toBe("transfers");
+    expect(result.category).toBe("Fees");
+    expect(result.sub_category).toBe("Ashby Loan Interest");
+    expect(result.type).toBe("bills_fixed");
+  });
+
+  it("counts an ING loan late payment fee as a Fees expense", () => {
+    const result = ruleCategorise("ING loan late payment fee", "");
+    expect(result.category).toBe("Fees");
+    expect(result.sub_category).toBe("Ashby Loan Fees");
+    expect(result.type).toBe("bills_fixed");
   });
 });

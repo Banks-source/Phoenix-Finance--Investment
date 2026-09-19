@@ -39,7 +39,10 @@ export const RULES: Rule[] = [
   // The interest charge ("Ashby INV loan") must be checked before the bare
   // principal-transfer rule below, or it'd get swallowed as "Ashby Loan" and
   // silently drop out of the interest total the dashboard surfaces as a cost.
-  { re: /INTEREST CHARGE.*ASHBY|ASHBY.*INTEREST CHARGE/, category: "Investment", sub_category: "Ashby loan interest", type: "transfers" },
+  // Interest and fees on the ING/Ashby loan are the real cost of the loan, so
+  // they're expenses (Fees); only the principal transfers below stay out.
+  { re: /INTEREST CHARGE.*ASHBY|ASHBY.*INTEREST CHARGE/, category: "Fees", sub_category: "Ashby Loan Interest", type: "bills_fixed" },
+  { re: /ASHBY.*LATE PAYMENT FEE|LATE PAYMENT FEE.*ASHBY|ING LOAN LATE PAYMENT FEE/, category: "Fees", sub_category: "Ashby Loan Fees", type: "bills_fixed" },
   { re: /ASHBY LOAN/, category: "Investment", sub_category: "Ashby Loan", type: "transfers" },
   { re: /ZIPMONEY|ZIP MONEY/, category: "Money Movement", sub_category: "ZipMoney", type: "debt" },
 

@@ -38,7 +38,7 @@ export const CATEGORIES: CategoryDef[] = [
   { name: "Fees", type: "bills_fixed" },
   { name: "Family Assistance", type: "bills_fixed", notes: "Ongoing support payments to family (e.g. Rudy) — a real recurring expense, not a debt repayment" },
   { name: "Cash Withdrawal", type: "spending", notes: "Cash pulled out is presumed spent" },
-  { name: "Investment", type: "transfers", notes: "Property capital, land tax, ASIC, and Ashby Loan principal transfers — the loan's interest is what's surfaced as a real cost" },
+  { name: "Investment", type: "transfers", notes: "Property capital, land tax, ASIC, and Ashby Loan principal transfers — the loan's interest and fees are categorised under Fees as real costs" },
   { name: "Money Movement", type: "transfers" },
   { name: "Income", type: "income" },
   { name: "Uncategorised", type: "spending", notes: "Nothing matched a rule yet — counted as spending so it isn't silently missing from Expenses" },
