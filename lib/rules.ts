@@ -29,7 +29,6 @@ export const RULES: Rule[] = [
   // ---- Fees & interest charged -------------------------------------------
   { re: /NAB INTNL TRAN FEE|INTERNATIONAL TRANSACTION FEE/, category: "Fees", sub_category: "Intl fee", type: "bills_fixed" },
   { re: /INTEREST ON PURCHASE|INTEREST CHARGED|DEBIT INT RATE/, category: "Fees", sub_category: "Interest charged", type: "bills_fixed" },
-  { re: /LATE PAYMENT FEE/, category: "Fees", sub_category: "Late payment fee", type: "bills_fixed" },
 
   // ---- Debt repayments (creditors — see PRD known gap) --------------------
   // Ashby and Westpac here are transfers moving cash to fund a loan/redraw
@@ -44,6 +43,8 @@ export const RULES: Rule[] = [
   // they're expenses (Fees); only the principal transfers below stay out.
   { re: /INTEREST CHARGE.*ASHBY|ASHBY.*INTEREST CHARGE/, category: "Fees", sub_category: "Ashby Loan Interest", type: "bills_fixed" },
   { re: /ASHBY.*LATE PAYMENT FEE|LATE PAYMENT FEE.*ASHBY|ING LOAN LATE PAYMENT FEE/, category: "Fees", sub_category: "Ashby Loan Fees", type: "bills_fixed" },
+  // Generic fallback — must stay below the Ashby-specific fee rule above.
+  { re: /LATE PAYMENT FEE/, category: "Fees", sub_category: "Late payment fee", type: "bills_fixed" },
   { re: /ASHBY LOAN/, category: "Investment", sub_category: "Ashby Loan", type: "transfers" },
   { re: /ZIPMONEY|ZIP MONEY/, category: "Money Movement", sub_category: "ZipMoney", type: "debt" },
 
