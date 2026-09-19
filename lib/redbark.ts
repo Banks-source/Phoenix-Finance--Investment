@@ -94,6 +94,9 @@ async function redbarkRequest<T>(path: string, params?: Record<string, string | 
       Authorization: `Bearer ${apiKey}`,
       "Redbark-Version": apiVersion,
     },
+    // Never serve a cached copy: Next's data cache survives redeploys, and a
+    // stale connections/accounts list hides newly connected banks.
+    cache: "no-store",
   });
 
   const json = await res.json();
