@@ -14,7 +14,7 @@ export function createServiceClient() {
       // Next's data cache persists across redeploys and was serving stale
       // reads (e.g. account-owner rows added after the first sync). Every
       // service-role query must hit the database.
-      global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) },
+      global: { fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, { ...init, cache: "no-store" }) },
     }
   );
 }
