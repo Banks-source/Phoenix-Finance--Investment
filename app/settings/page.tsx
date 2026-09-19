@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/ui";
 import Link from "next/link";
-import { Tags, BellRing } from "lucide-react";
+import { Tags, BellRing, UserCog } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,12 @@ const SECTIONS = [
     title: "Budget Alerts",
     description: "Email or SMS alerts when a category goes over budget.",
     icon: BellRing,
+  },
+  {
+    href: "/settings/account",
+    title: "Account",
+    description: "Change your password.",
+    icon: UserCog,
   },
 ];
 

@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/ui";
 import Link from "next/link";
-import { PieChart, FileText, Wallet, Settings2, Tags, BellRing, ChevronRight } from "lucide-react";
+import { PieChart, FileText, Wallet, Settings2, Tags, BellRing, UserCog, ChevronRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/tax", label: "Tax", description: "Deduction claims and year-over-year comparison", icon: FileText },
   { href: "/settings/categories", label: "Categories & Rules", description: "The sub-category rule engine", icon: Tags },
   { href: "/settings/alerts", label: "Budget Alerts", description: "Email or SMS when a category goes over", icon: BellRing },
+  { href: "/settings/account", label: "Account", description: "Change your password", icon: UserCog },
   { href: "/settings", label: "Settings", description: "All configuration", icon: Settings2 },
 ];
 
