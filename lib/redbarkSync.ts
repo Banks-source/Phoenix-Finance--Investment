@@ -10,6 +10,8 @@ export type RedbarkSyncResult = {
   unmappedAccounts: { id: string; name: string; institution: string }[];
   perAccount: { accountId: string; name: string; imported: number }[];
   balanceErrors: { name: string; message: string }[];
+  // Which connections the API key can see, and how many accounts each returned.
+  connections: { name: string; status: string; category: string; accounts: number }[];
 };
 
 export const DETAIL_COLUMNS = [
@@ -93,9 +95,12 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
 
   const connections = await listConnections();
   const bankingAccounts: RedbarkAccount[] = [];
+  const connectionsSeen: RedbarkSyncResult["connections"] = [];
   for (const conn of connections) {
     if (conn.status !== "active" || conn.category !== "banking") continue;
-    bankingAccounts.push(...(await listAccounts(conn.id)));
+    const accts = await listAccounts(conn.id);
+    bankingAccounts.push(...accts);
+    connectionsSeen.push({ name: conn.institution?.name ?? conn.id, status: conn.status, category: conn.category, accounts: accts.length });
   }
 
   const result: RedbarkSyncResult = {
@@ -104,6 +109,7 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
     unmappedAccounts: [],
     perAccount: [],
     balanceErrors: [],
+    connections: connectionsSeen,
   };
 
   for (const acct of bankingAccounts) {
