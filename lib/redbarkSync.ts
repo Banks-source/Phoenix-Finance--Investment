@@ -82,6 +82,11 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
     if (!data || data.length < 1000) break;
   }
   const seen = new Set(existing.map((e) => `${e.date}|${e.amount}|${e.detail}|${e.owner}`));
+  // A joint account's activity may already be stored under either spouse (from
+  // their own feed or an earlier import), so for joint accounts an identical
+  // date|amount|detail under *any* owner counts as already imported. Not done
+  // for individual accounts, where identical same-day rows can be genuine.
+  const seenAnyOwner = new Set(existing.map((e) => `${e.date}|${e.amount}|${e.detail}`));
 
   const { data: accountRows } = await supabase.from("accounts").select("account_label, account_number_masked");
   const ourAccountDigits = extractAccountDigits(...(accountRows ?? []).flatMap((a) => [a.account_label, a.account_number_masked]));
@@ -149,7 +154,7 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
       const signedAmount = t.direction === "debit" ? -Math.abs(t.amount.amount) : Math.abs(t.amount.amount);
       const amount = signedAmount / 100; // Redbark amounts are in minor units (cents)
       const key = `${t.date}|${amount}|${t.description}|${owner}`;
-      if (seen.has(key)) {
+      if (seen.has(key) || (owner === "joint" && seenAnyOwner.has(`${t.date}|${amount}|${t.description}`))) {
         result.skippedDuplicates++;
         continue;
       }

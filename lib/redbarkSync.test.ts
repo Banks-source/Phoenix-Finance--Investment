@@ -232,6 +232,30 @@ describe("runRedbarkSync", () => {
     expect(state.insertedTransactions).toHaveLength(0);
   });
 
+  it("on a joint account, skips a transaction already stored under another owner", async () => {
+    state.redbarkAccountOwners = [{ redbark_account_id: "acct_1", owner: "joint" }];
+    state.existingTransactions = [{ date: "2026-09-07", amount: 3285, detail: "MILANI SIMIC Ashby loan", owner: "milani" }];
+    listConnectionsMock.mockResolvedValue([activeBankingConnection]);
+    listAccountsMock.mockResolvedValue([{ id: "acct_1", name: "Orange Everyday", institution: { name: "ING" } }]);
+    listTransactionsMock.mockResolvedValue([
+      {
+        id: "txn_1",
+        date: "2026-09-07",
+        description: "MILANI SIMIC Ashby loan",
+        amount: { amount: 328500, currency: "aud" },
+        direction: "credit",
+        merchant_name: null,
+        provider_category: null,
+      },
+    ]);
+
+    const { runRedbarkSync } = await import("./redbarkSync");
+    const result = await runRedbarkSync();
+
+    expect(result.imported).toBe(0);
+    expect(result.skippedDuplicates).toBe(1);
+  });
+
   it("uses the account's last-synced date (minus overlap) as the from param", async () => {
     state.redbarkAccountOwners = [{ redbark_account_id: "acct_1", owner: "lloyd" }];
     state.accountsByRedbarkId["acct_1"] = { id: "existing-id", redbark_last_synced_at: "2026-03-10T00:00:00.000Z" };
