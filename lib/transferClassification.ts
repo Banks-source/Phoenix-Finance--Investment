@@ -76,9 +76,12 @@ export function deriveMoneyMovementSubCategory(
   if (direction) return direction;
 
   const hay = `${detail ?? ""} ${merchant ?? ""}`.toUpperCase();
-  if (/CBA ATM|ATM DEBIT|CASH WITHDRAWAL|CASH WITHDRAWL|\bWITHDRAWAL\b|CASHCARD ATM|INDEPENDENT ATM/.test(hay)) {
+  if (/CBA ATM|ATM DEBIT|CASH WITHDRAWAL|CASH WITHDRAWL|CASHCARD ATM|INDEPENDENT ATM/.test(hay)) {
     return "Cash Withdrawal";
   }
+  // A bare "WITHDRAWAL" with no ATM wording is how the Westpac Flexi Loan
+  // (buffer) labels money moved out — not cash in hand.
+  if (/\bWITHDRAWAL\b/.test(hay)) return "Internal transfer";
   if (/ZIPMONEY|ZIP MONEY/.test(hay)) return "ZipMoney";
   if (/CENTRELINK|CLINK DIR DEBIT/.test(hay)) return "Centrelink";
   if (/LINKED ACC TRNS|INTERNET PAYMENT|LINKED ACC|\bBPAY\b|PAYID|NETBANK|INTERNET TRANSFER/.test(hay)) {

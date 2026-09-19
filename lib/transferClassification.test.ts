@@ -72,7 +72,8 @@ describe("deriveMoneyMovementSubCategory", () => {
 
   it("classifies cash withdrawals, ZipMoney, Centrelink, and generic card/bill payments", () => {
     expect(deriveMoneyMovementSubCategory("CBA ATM CASH WITHDRAWAL", null, OUR_DIGITS)).toBe("Cash Withdrawal");
-    expect(deriveMoneyMovementSubCategory("WITHDRAWAL", "WITHDRAWAL", OUR_DIGITS)).toBe("Cash Withdrawal");
+    // Bare "WITHDRAWAL" is a Westpac buffer move, not cash
+    expect(deriveMoneyMovementSubCategory("WITHDRAWAL", "WITHDRAWAL", OUR_DIGITS)).toBe("Internal transfer");
     expect(deriveMoneyMovementSubCategory("ZIPMONEY* P888147211 SYDNEY NS", null, OUR_DIGITS)).toBe("ZipMoney");
     expect(deriveMoneyMovementSubCategory("Centrelink payment", null, OUR_DIGITS)).toBe("Centrelink");
     expect(deriveMoneyMovementSubCategory("INTERNET PAYMENT Linked Acc Trns", null, OUR_DIGITS)).toBe("Card payment");
