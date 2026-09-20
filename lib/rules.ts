@@ -76,8 +76,12 @@ export const RULES: Rule[] = [
   // ---- Insurance ----------------------------------------------------------
   { re: /NRMA|RACV|MEDIBANK|PETSURE|PET INSURANCE|AAMI|ALLIANZ|BUPA|NIB\b|SUNCORP INS/, category: "Insurance", type: "bills_fixed" },
 
-  // ---- Rent / school fees (fixed) ----------------------------------------
-  { re: /COOLUM COASTAL|LANG29ML/, category: "Kids", sub_category: "School fees", type: "spending" },
+  // ---- Rent (fixed) -------------------------------------------------------
+  // LANG29ML is the rent payment reference — it appears both as "Coolum Coastal
+  // ... LANG29ML" and as a bare "INTERNET TRANSFER LANG29ML" from the same
+  // account. (Occasional water/strata charges on it are re-categorised by hand.)
+  { re: /LANG29ML/, category: "Rent", sub_category: "Rent Payment", type: "bills_fixed" },
+  { re: /COOLUM COASTAL/, category: "Rent", sub_category: "Rent Payment", type: "bills_fixed" },
   { re: /EDSTART|BESTACADEMY|PEREGIAN KIDS|MY SCHOOL (CONNECT|TUCKSHOP)|SUNSHINE COAST SPORTS/, category: "Kids", sub_category: "School / activities", type: "spending" },
 
   // ---- Health / medical ---------------------------------------------------

@@ -105,3 +105,13 @@ describe("ruleCategorise — ING loan account lines", () => {
     expect(r.type).toBe("bills_fixed");
   });
 });
+
+describe("ruleCategorise — rent payments", () => {
+  it("treats both forms of the LANG29ML rent transfer as Rent, not a bare transfer", () => {
+    for (const d of ["INTERNET TRANSFER LANG29ML", "Coolum Coastal Q5614078044 LANG29ML"]) {
+      const r = ruleCategorise(d, "");
+      expect(r).toMatchObject({ category: "Rent", sub_category: "Rent Payment", type: "bills_fixed" });
+    }
+  });
+});
+
