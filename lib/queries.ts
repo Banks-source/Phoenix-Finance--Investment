@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { PeriodFilter, periodBounds, periodsFromDates, fyRange, fyEndYearForDate, EXPENSE_TYPES } from "@/lib/fy";
-import { TxnType, CATEGORY_TYPE } from "@/lib/taxonomy";
+import { PeriodFilter, parsePeriod, periodBounds, periodsFromDates, fyRange, fyEndYearForDate, EXPENSE_TYPES } from "@/lib/fy";
+import { TxnType, CATEGORY_TYPE, NO_SUB_CATEGORY } from "@/lib/taxonomy";
 import { CLAIM_CANDIDATE_CATEGORIES, categoryIsDeductibleLens } from "@/lib/taxcats";
 
 type AnyClient = ReturnType<typeof createServiceClient>;
@@ -76,6 +76,35 @@ export interface FetchOpts {
   offset?: number;
 }
 
+/** The filters a transaction list view can apply (also accepted by the edit API). */
+export type TxnFilter = Omit<FetchOpts, "limit" | "offset" | "period"> & {
+  period?: string;
+  value?: string;
+  from?: string;
+  to?: string;
+};
+
+/** Every transaction id matching a list view's filters — for "edit all N matching". */
+export async function fetchTransactionIds(f: TxnFilter): Promise<string[]> {
+  const period = f.period ? parsePeriod({ period: f.period, value: f.value, from: f.from, to: f.to }) : undefined;
+  const rows = await fetchAll<{ id: string }>((c) => {
+    let q = c.from("transactions").select("id");
+    if (period) {
+      const b = periodBounds(period);
+      if (b) q = q.gte("date", b[0]).lte("date", b[1]);
+    }
+    if (f.status) q = q.eq("status", f.status);
+    if (f.owner) q = q.eq("owner", f.owner);
+    if (f.type) q = q.eq("type", f.type);
+    if (f.category) q = q.eq("category", f.category);
+    if (f.sub_category) q = f.sub_category === NO_SUB_CATEGORY ? q.is("sub_category", null) : q.eq("sub_category", f.sub_category);
+    if (f.tax_category) q = q.eq("tax_category", f.tax_category);
+    if (f.search) q = q.or(`detail.ilike.%${f.search}%,merchant.ilike.%${f.search}%`);
+    return q.order("id");
+  });
+  return rows.map((r) => r.id);
+}
+
 export async function fetchTransactions(opts: FetchOpts = {}) {
   const supabase = createServiceClient();
   let q = supabase.from("transactions").select("*", { count: "exact" });
@@ -88,7 +117,7 @@ export async function fetchTransactions(opts: FetchOpts = {}) {
   if (opts.owner) q = q.eq("owner", opts.owner);
   if (opts.type) q = q.eq("type", opts.type);
   if (opts.category) q = q.eq("category", opts.category);
-  if (opts.sub_category) q = q.eq("sub_category", opts.sub_category);
+  if (opts.sub_category) q = opts.sub_category === NO_SUB_CATEGORY ? q.is("sub_category", null) : q.eq("sub_category", opts.sub_category);
   if (opts.tax_category) q = q.eq("tax_category", opts.tax_category);
   if (opts.search) q = q.or(`detail.ilike.%${opts.search}%,merchant.ilike.%${opts.search}%`);
 

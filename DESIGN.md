@@ -33,5 +33,7 @@ Type: one family (system stack). Page title `text-xl sm:text-2xl semibold`; card
 - **Progress:** 2–2.5px bar in `bg-gray-100`; fill indigo → amber ≥ 85% → rose > 100%.
 - **Bank-app feed:** rows grouped under a day header (`Today`, `Yesterday`, `Monday 14 September`), amounts right-aligned, credits green.
 
+- **Transaction list:** one component (`TxnList`) everywhere transactions appear (Transactions, and Reclassify which now redirects there). Day-grouped rows, tap to expand for inline edit + bank detail, checkboxes → a bulk bar above the tab bar (category, sub-category, owner, status; "select all N matching"; undo). Sub-category lists (`SubCategoryList`) get bulk rename / merge / move.
+
 ## Not yet done
 Older pages (Tax, Portfolio, Categories, Review queues) use the same `.card` base but haven't had a mobile pass — apply the patterns above page by page rather than restyling in bulk.

@@ -44,6 +44,9 @@ export const CATEGORIES: CategoryDef[] = [
   { name: "Uncategorised", type: "spending", notes: "Nothing matched a rule yet — counted as spending so it isn't silently missing from Expenses" },
 ];
 
+/** Filter value meaning "no sub-category set" (a real value can't be null in a URL). */
+export const NO_SUB_CATEGORY = "__none__";
+
 export const CATEGORY_TYPE: Record<string, TxnType> = Object.fromEntries(
   CATEGORIES.map((c) => [c.name, c.type])
 );

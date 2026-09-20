@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { resolveType } from "@/lib/taxonomy";
+import { buildBulkUpdate, BulkPatch } from "@/lib/bulkEdit";
+import { fetchTransactionIds, TxnFilter } from "@/lib/queries";
 import { normalizeMerchant } from "@/lib/categorise";
 
 type Supa = ReturnType<typeof createServiceClient>;
+
+// PostgREST rejects very long `in (...)` lists, so work in chunks.
+const CHUNK = 200;
 
 // Remember a manual categorisation so future imports auto-apply it.
 // Keyed on the (normalised) merchant of each affected row. Rows with no
@@ -15,11 +19,13 @@ async function learnMerchantRules(
   sub_category: string | null,
   type: string
 ) {
-  const { data: txns } = await supabase.from("transactions").select("merchant").in("id", ids);
   const patterns = new Set<string>();
-  for (const t of txns ?? []) {
-    const p = normalizeMerchant((t as { merchant: string | null }).merchant ?? "");
-    if (p.length >= 3) patterns.add(p);
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const { data: txns } = await supabase.from("transactions").select("merchant").in("id", ids.slice(i, i + CHUNK));
+    for (const t of txns ?? []) {
+      const p = normalizeMerchant((t as { merchant: string | null }).merchant ?? "");
+      if (p.length >= 3) patterns.add(p);
+    }
   }
   if (!patterns.size) return;
 
@@ -41,77 +47,31 @@ async function learnMerchantRules(
   await supabase.from("merchant_rules").upsert(rows, { onConflict: "merchant_pattern" });
 }
 
-// Transaction review + edit endpoint (service-role, server-only).
-//   - Approve one:      { id, category?, sub_category? }
-//   - Edit category:    { id, category, sub_category?, keepStatus: true }
-//   - Bulk approve:     { ids: string[] }                      (approve as-is)
-//   - Bulk categorise:  { ids: string[], category, sub_category?, keepStatus? }
-//   - Undo / revert:    { ids: string[], status: "pending_review" }
+// Transaction edit endpoint (service-role, server-only). Every edit view uses it.
+//   Target:  { id } | { ids } | { filter }   (filter = everything matching a list view's filters)
+//   Change:  any of category, sub_category, owner, status — see lib/bulkEdit.ts.
+//   Approve: no change fields, and no keepStatus  → approves as-is.
 // Category changes recompute `type` from the taxonomy and are remembered as
 // merchant_rules so the same merchant is auto-categorised on the next import.
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as {
-    id?: string;
-    ids?: string[];
-    category?: string;
-    sub_category?: string | null;
-    keepStatus?: boolean;
-    status?: "pending_review" | "approved";
-  };
+  const body = (await req.json()) as BulkPatch & { id?: string; ids?: string[]; filter?: TxnFilter };
   const supabase = createServiceClient();
 
-  // Bulk operations on multiple ids.
-  if (body.ids?.length) {
-    const update: Record<string, unknown> = {};
-    let learnedType: string | undefined;
-    if (body.category) {
-      learnedType = resolveType(body.category, body.sub_category ?? undefined);
-      update.category = body.category;
-      update.sub_category = body.sub_category ?? null;
-      update.type = learnedType;
-    } else if (body.sub_category !== undefined) {
-      // Sub-category-only edit: keep the existing category/type.
-      update.sub_category = body.sub_category;
-    }
-    if (body.status) update.status = body.status;
-    else if (!body.keepStatus) update.status = "approved";
-    if (Object.keys(update).length === 0) {
-      return NextResponse.json({ error: "nothing to update" }, { status: 400 });
-    }
-    const { error } = await supabase.from("transactions").update(update).in("id", body.ids);
+  let ids: string[];
+  if (body.ids?.length) ids = body.ids;
+  else if (body.id) ids = [body.id];
+  else if (body.filter) ids = await fetchTransactionIds(body.filter);
+  else return NextResponse.json({ error: "id, ids or filter required" }, { status: 400 });
+
+  const built = buildBulkUpdate(body);
+  if ("error" in built) return NextResponse.json({ error: built.error }, { status: 400 });
+
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const { error } = await supabase.from("transactions").update(built.update).in("id", ids.slice(i, i + CHUNK));
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (body.category && learnedType) {
-      await learnMerchantRules(supabase, body.ids, body.category, body.sub_category ?? null, learnedType);
-    }
-    return NextResponse.json({ ok: true, updated: body.ids.length });
   }
-
-  if (!body.id) {
-    return NextResponse.json({ error: "id or ids required" }, { status: 400 });
+  if (body.category && built.learnedType) {
+    await learnMerchantRules(supabase, ids, body.category, body.sub_category ?? null, built.learnedType);
   }
-
-  const update: Record<string, unknown> = {};
-  let learnedType: string | undefined;
-  if (body.category) {
-    learnedType = resolveType(body.category, body.sub_category ?? undefined);
-    update.category = body.category;
-    update.sub_category = body.sub_category ?? null;
-    update.type = learnedType;
-  } else if (body.sub_category !== undefined) {
-    // Sub-category-only edit: keep the existing category/type.
-    update.sub_category = body.sub_category;
-  }
-  if (body.status) update.status = body.status;
-  else if (!body.keepStatus) update.status = "approved";
-
-  if (Object.keys(update).length === 0) {
-    return NextResponse.json({ error: "nothing to update" }, { status: 400 });
-  }
-
-  const { error } = await supabase.from("transactions").update(update).eq("id", body.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (body.category && learnedType) {
-    await learnMerchantRules(supabase, [body.id], body.category, body.sub_category ?? null, learnedType);
-  }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, updated: ids.length });
 }
