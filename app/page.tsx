@@ -24,12 +24,11 @@ export default async function OverviewPage({
   const period = parsePeriod(effective);
 
   const today = new Date();
-  const [totals, categories, incomeSubs, transferSubs, netWorthHistory, balances, budgets, monthSpend, ytdAverages] =
+  const [totals, categories, incomeSubs, netWorthHistory, balances, budgets, monthSpend, ytdAverages] =
     await Promise.all([
       fetchTypeTotals(period),
       fetchCategoryTotals(period),
       fetchSubCategoryTotals("income", period),
-      fetchSubCategoryTotals("transfers", period),
       fetchNetWorthHistory(),
       fetchBalanceSummary(),
       fetchCategoryBudgets(),
@@ -75,15 +74,6 @@ export default async function OverviewPage({
     href: incomeHref(s.name),
     note: undefined as string | undefined,
   }));
-  const propertyExpenses = transferSubs
-    .filter((s) => s.name === "Ashby loan interest" || s.name === "Ashby loan fees")
-    .map((s) => ({
-      category: s.name,
-      count: s.count,
-      abs: Math.abs(s.net),
-      href: `/reclassify?${new URLSearchParams({ sub_category: s.name, ...periodParams })}`,
-      note: s.name === "Ashby loan interest" ? "Ashby investment-loan interest (deductible)" : undefined,
-    }));
   const expenseCats = [
     ...categories
       .filter((c) => EXPENSE_TYPES.includes(c.type as (typeof EXPENSE_TYPES)[number]))
@@ -94,10 +84,9 @@ export default async function OverviewPage({
         href: expenseHref(c.category),
         note: undefined as string | undefined,
       })),
-    ...propertyExpenses,
   ].sort((a, b) => b.abs - a.abs);
 
-  const expenses = expensesBase + propertyExpenses.reduce((s, i) => s + i.abs, 0);
+  const expenses = expensesBase;
   const net = income - expenses;
 
   return (

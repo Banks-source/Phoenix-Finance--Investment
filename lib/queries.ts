@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { PeriodFilter, periodBounds, periodsFromDates, fyRange, fyEndYearForDate, EXPENSE_TYPES } from "@/lib/fy";
-import { TxnType } from "@/lib/taxonomy";
+import { TxnType, CATEGORY_TYPE } from "@/lib/taxonomy";
 import { CLAIM_CANDIDATE_CATEGORIES, categoryIsDeductibleLens } from "@/lib/taxcats";
 
 type AnyClient = ReturnType<typeof createServiceClient>;
@@ -205,7 +205,9 @@ export async function fetchCategoryTotals(period?: PeriodFilter) {
   const map = new Map<string, { category: string; type: string; net: number; count: number }>();
   for (const r of rows) {
     const key = r.category ?? "Uncategorised";
-    const e = map.get(key) ?? { category: key, type: r.type, net: 0, count: 0 };
+    // The category's type comes from the taxonomy, not whichever row is met
+    // first — a category with mixed row types was otherwise misclassified.
+    const e = map.get(key) ?? { category: key, type: CATEGORY_TYPE[key] ?? r.type, net: 0, count: 0 };
     e.net += Number(r.amount);
     e.count += 1;
     map.set(key, e);
