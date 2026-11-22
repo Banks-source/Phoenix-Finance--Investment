@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { listConnections, listAccounts, listTransactions, getBalance, RedbarkAccount, RedbarkTransaction } from "@/lib/redbark";
 import { categoriseSync, MerchantRule } from "@/lib/categorise";
+import { loadMerchantRules } from "@/lib/payeeMemory";
 import { classifyMoneyMovement, extractAccountDigits, needsBufferDecision } from "@/lib/transferClassification";
 import { applyIngLoanCategory } from "@/lib/ingProperty";
 import { resolveIncomeSubCategory, Owner } from "@/lib/incomeClassification";
@@ -123,8 +124,7 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
   const { data: ownerRows } = await supabase.from("redbark_account_owners").select("redbark_account_id, owner");
   const ownerMap = new Map((ownerRows ?? []).map((r) => [r.redbark_account_id, r.owner]));
 
-  const { data: rules } = await supabase.from("merchant_rules").select("*");
-  const merchantRules = (rules ?? []) as MerchantRule[];
+  const merchantRules = await loadMerchantRules(supabase);
 
   // PostgREST caps a select at 1000 rows, and this table has grown well past
   // that — an unpaginated fetch here silently missed most existing rows and

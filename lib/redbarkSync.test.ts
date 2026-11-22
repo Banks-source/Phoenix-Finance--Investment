@@ -47,6 +47,7 @@ function resetState() {
 function fakeFrom(table: string) {
   const chain: any = {
     select: (_cols?: string) => chain,
+    order: (_col?: string) => chain,
     eq: (col: string, val: string) => {
       chain.__eqCol = col;
       chain.__eqVal = val;
@@ -82,7 +83,8 @@ function fakeFrom(table: string) {
     range: (from: number, _to: number) => {
       // Paginated existing-transactions fetch: return the whole fake table on
       // the first page, then an empty page to terminate the loop.
-      const data = table === "transactions" && from === 0 ? state.existingTransactions : [];
+      const data =
+        from !== 0 ? [] : table === "transactions" ? state.existingTransactions : table === "merchant_rules" ? state.merchantRules : [];
       return Promise.resolve({ data, error: null });
     },
     then: (onFulfilled: any) => {

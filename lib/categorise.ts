@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { CATEGORIES, TxnType } from "./taxonomy";
 import { ruleCategorise } from "./rules";
+import { candidateKeys } from "./payeeKey";
 
 export interface MerchantRule {
   merchant_pattern: string;
@@ -8,6 +9,8 @@ export interface MerchantRule {
   sub_category: string | null;
   type: TxnType;
   match_count: number;
+  /** user = you set it; confirmed = you approved it as-is; history = inferred from past approvals. Missing = legacy (treated as user). */
+  source?: "user" | "confirmed" | "history" | null;
 }
 
 export interface CategorySuggestion {
@@ -24,36 +27,53 @@ function normalizeMerchant(m: string): string {
 
 export { normalizeMerchant };
 
-/** Exact + simple substring match against the learned merchant_rules table. */
-export function matchRule(merchant: string, rules: MerchantRule[]): CategorySuggestion | null {
-  const norm = normalizeMerchant(merchant);
+const SOURCE_CONFIDENCE = { user: 0.97, confirmed: 0.93, history: 0.8 } as const;
 
-  const exact = rules.find((r) => normalizeMerchant(r.merchant_pattern) === norm);
-  if (exact) {
-    return {
-      category: exact.category,
-      sub_category: exact.sub_category,
-      type: exact.type,
-      confidence: 0.95,
-      method: "exact_rule",
-    };
+function suggestionFrom(r: MerchantRule, method: CategorySuggestion["method"]): CategorySuggestion {
+  const src = r.source ?? "user";
+  return {
+    category: r.category,
+    sub_category: r.sub_category,
+    type: r.type,
+    confidence: method === "fuzzy_rule" ? Math.min(SOURCE_CONFIDENCE[src], 0.9) - 0.01 : SOURCE_CONFIDENCE[src],
+    method,
+  };
+}
+
+/**
+ * Learned payee memory. Rules are keyed on a clean payee key (lib/payeeKey.ts),
+ * so "COLES 4420 COOLUM BEACH" and "Coles 8758 Peregian Sprs, Card xx1075" both
+ * hit the same rule. Falls back to the first word of the payee when a rule was
+ * learned on just that word ("COLES"), and to the legacy raw-text key.
+ */
+export function matchRule(merchant: string, rules: MerchantRule[], detail?: string | null): CategorySuggestion | null {
+  if (!rules.length) return null;
+  const byKey = new Map<string, MerchantRule>();
+  for (const r of rules) {
+    const k = normalizeMerchant(r.merchant_pattern);
+    const prev = byKey.get(k);
+    if (!prev || r.match_count > prev.match_count) byKey.set(k, r);
   }
 
-  const fuzzy = rules
-    .filter((r) => norm.includes(normalizeMerchant(r.merchant_pattern)) || normalizeMerchant(r.merchant_pattern).includes(norm))
-    .sort((a, b) => b.match_count - a.match_count)[0];
-  if (fuzzy) {
-    return {
-      category: fuzzy.category,
-      sub_category: fuzzy.sub_category,
-      type: fuzzy.type,
-      confidence: 0.6,
-      method: "fuzzy_rule",
-    };
+  const keys = candidateKeys(merchant, detail);
+  for (const k of keys) {
+    const hit = byKey.get(k);
+    if (hit) return suggestionFrom(hit, "exact_rule");
   }
+  const legacy = byKey.get(normalizeMerchant(merchant));
+  if (legacy) return suggestionFrom(legacy, "exact_rule");
 
+  for (const k of keys) {
+    const first = k.split(" ")[0];
+    if (first.length >= 4 && first !== k && !first.startsWith("TRANSFER")) {
+      const hit = byKey.get(first);
+      if (hit) return suggestionFrom(hit, "fuzzy_rule");
+    }
+  }
   return null;
 }
+
+const isTrusted = (s: CategorySuggestion | null, rules: MerchantRule[]) => !!s && s.confidence >= 0.9 && rules.length > 0;
 
 /**
  * Claude API fallback for merchants with no rule match. Every result still
@@ -114,8 +134,8 @@ export async function categoriseTransaction(
   rules: MerchantRule[],
   bankCategory?: string | null
 ): Promise<CategorySuggestion> {
-  const ruleMatch = matchRule(merchant, rules);
-  if (ruleMatch && ruleMatch.confidence >= 0.9) return ruleMatch;
+  const ruleMatch = matchRule(merchant, rules, detail);
+  if (isTrusted(ruleMatch, rules)) return ruleMatch!; // your own rules beat the built-in ones
 
   const det = ruleCategorise(detail, merchant, bankCategory);
   if (det.method !== "unmatched") {
@@ -148,9 +168,10 @@ export function categoriseSync(
   rules: MerchantRule[],
   bankCategory?: string | null
 ): CategorySuggestion {
-  const ruleMatch = matchRule(merchant, rules);
-  if (ruleMatch && ruleMatch.confidence >= 0.9) return ruleMatch;
+  const ruleMatch = matchRule(merchant, rules, detail);
+  if (isTrusted(ruleMatch, rules)) return ruleMatch!; // your own rules beat the built-in ones
   const det = ruleCategorise(detail, merchant, bankCategory);
+  if (det.method === "unmatched" && ruleMatch) return ruleMatch; // history-derived guess beats nothing
   return {
     category: det.category,
     sub_category: det.sub_category,

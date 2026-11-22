@@ -2,57 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { buildBulkUpdate, BulkPatch } from "@/lib/bulkEdit";
 import { fetchTransactionIds, TxnFilter } from "@/lib/queries";
-import { normalizeMerchant } from "@/lib/categorise";
+import { learnPayees, applyRulesToPending, RuleSource } from "@/lib/payeeMemory";
 
 type Supa = ReturnType<typeof createServiceClient>;
 
 // PostgREST rejects very long `in (...)` lists, so work in chunks.
 const CHUNK = 200;
 
-// Remember a manual categorisation so future imports auto-apply it.
-// Keyed on the (normalised) merchant of each affected row. Rows with no
-// merchant are skipped — a rule on an empty/detail-only pattern is too noisy.
-async function learnMerchantRules(
-  supabase: Supa,
-  ids: string[],
-  category: string,
-  sub_category: string | null,
-  type: string
-) {
-  const patterns = new Set<string>();
+async function rowsFor(supabase: Supa, ids: string[]) {
+  const out: { merchant: string | null; detail: string | null; category: string | null; sub_category: string | null }[] = [];
   for (let i = 0; i < ids.length; i += CHUNK) {
-    const { data: txns } = await supabase.from("transactions").select("merchant").in("id", ids.slice(i, i + CHUNK));
-    for (const t of txns ?? []) {
-      const p = normalizeMerchant((t as { merchant: string | null }).merchant ?? "");
-      if (p.length >= 3) patterns.add(p);
-    }
+    const { data } = await supabase.from("transactions").select("merchant,detail,category,sub_category").in("id", ids.slice(i, i + CHUNK));
+    out.push(...(data ?? []));
   }
-  if (!patterns.size) return;
-
-  const { data: existing } = await supabase
-    .from("merchant_rules")
-    .select("merchant_pattern, match_count")
-    .in("merchant_pattern", [...patterns]);
-  const counts = new Map((existing ?? []).map((r) => [r.merchant_pattern as string, r.match_count as number]));
-
-  const nowIso = new Date().toISOString();
-  const rows = [...patterns].map((merchant_pattern) => ({
-    merchant_pattern,
-    category,
-    sub_category,
-    type,
-    match_count: (counts.get(merchant_pattern) ?? 0) + 1,
-    last_used: nowIso,
-  }));
-  await supabase.from("merchant_rules").upsert(rows, { onConflict: "merchant_pattern" });
+  return out;
 }
 
 // Transaction edit endpoint (service-role, server-only). Every edit view uses it.
 //   Target:  { id } | { ids } | { filter }   (filter = everything matching a list view's filters)
 //   Change:  any of category, sub_category, owner, status — see lib/bulkEdit.ts.
 //   Approve: no change fields, and no keepStatus  → approves as-is.
-// Category changes recompute `type` from the taxonomy and are remembered as
-// merchant_rules so the same merchant is auto-categorised on the next import.
+// Every category / sub-category edit is remembered per payee (lib/payeeMemory.ts)
+// and applied to the other unreviewed transactions from that payee; approving a
+// few rows as-is is remembered as a confirmation.
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as BulkPatch & { id?: string; ids?: string[]; filter?: TxnFilter };
   const supabase = createServiceClient();
@@ -70,8 +42,20 @@ export async function POST(req: NextRequest) {
     const { error } = await supabase.from("transactions").update(built.update).in("id", ids.slice(i, i + CHUNK));
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  if (body.category && built.learnedType) {
-    await learnMerchantRules(supabase, ids, body.category, body.sub_category ?? null, built.learnedType);
+  // Learning is best-effort: a failure here must never undo or hide the edit itself.
+  let learned = 0;
+  let alsoUpdated = 0;
+  try {
+    const edited = body.category !== undefined || body.sub_category !== undefined;
+    const confirmed = !edited && built.update.status === "approved" && !body.filter && ids.length <= CHUNK;
+    if (edited || confirmed) {
+      const source: RuleSource = edited ? "user" : "confirmed";
+      const written = await learnPayees(await rowsFor(supabase, ids), source, supabase);
+      learned = written.length;
+      if (source === "user") alsoUpdated = await applyRulesToPending(written, new Set(ids), supabase);
+    }
+  } catch (e) {
+    console.error("learning failed", e);
   }
-  return NextResponse.json({ ok: true, updated: ids.length });
+  return NextResponse.json({ ok: true, updated: ids.length, learned, alsoUpdated });
 }

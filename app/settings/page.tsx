@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/ui";
 import Link from "next/link";
-import { Tags, BellRing, UserCog } from "lucide-react";
+import { Tags, BellRing, UserCog, Brain } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +10,12 @@ const SECTIONS = [
     title: "Categories & Rules",
     description: "The sub-category rule engine — add new sub-categories per category, remove unused ones.",
     icon: Tags,
+  },
+  {
+    href: "/settings/memory",
+    title: "Categorisation memory",
+    description: "What the app has learned from your edits and approvals — change or forget any payee.",
+    icon: Brain,
   },
   {
     href: "/settings/alerts",

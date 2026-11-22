@@ -12,13 +12,24 @@ import { ArrowRight, Check, CheckCheck, ChevronDown, ChevronRight, Undo2, X } fr
 
 const OWNER_LABEL: Record<string, string> = { lloyd: "Lloyd", milani: "Milani", joint: "Joint" };
 
-async function post(body: unknown): Promise<boolean> {
+type PostResult = { ok: boolean; learned?: number; alsoUpdated?: number };
+
+async function post(body: unknown): Promise<PostResult> {
   const res = await fetch("/api/review", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  return res.ok;
+  if (!res.ok) return { ok: false };
+  try {
+    return { ok: true, ...(await res.json()) };
+  } catch {
+    return { ok: true };
+  }
+}
+
+function alsoText(n?: number) {
+  return n ? ` · also updated ${n.toLocaleString()} similar unreviewed` : "";
 }
 
 function dayLabel(iso: string): string {
@@ -125,13 +136,13 @@ export default function TxnList({
           const r = byId.get(id);
           return r ? [{ id, category: r.category, sub_category: r.sub_category, owner: r.owner, status: r.status }] : [];
         });
-    const ok = await post({ ...target, keepStatus: true, ...change });
-    if (!ok) {
+    const r = await post({ ...target, keepStatus: true, ...change });
+    if (!r.ok) {
       setBusy(false);
       setMessage({ text: "Couldn't save that — nothing was changed.", error: true });
       return;
     }
-    done(`${summary} · ${count.toLocaleString()} transaction${count === 1 ? "" : "s"}`, undo);
+    done(`${summary} · ${count.toLocaleString()} transaction${count === 1 ? "" : "s"}${alsoText(r.alsoUpdated)}`, undo);
   }
 
   async function applyForm() {
@@ -183,9 +194,10 @@ export default function TxnList({
   // single-row inline edit
   async function saveRow(id: string, change: Record<string, unknown>) {
     setBusy(true);
-    const ok = await post({ id, keepStatus: true, ...change });
+    const r = await post({ id, keepStatus: true, ...change });
     setBusy(false);
-    if (!ok) return setMessage({ text: "Couldn't save that change.", error: true });
+    if (!r.ok) return setMessage({ text: "Couldn't save that change.", error: true });
+    if (r.alsoUpdated) setMessage({ text: `Saved${alsoText(r.alsoUpdated)}` });
     startTransition(() => router.refresh());
   }
 
@@ -219,9 +231,9 @@ export default function TxnList({
             onClick={() => {
               if (window.confirm(`Approve all ${total.toLocaleString()} transactions matching these filters?`)) {
                 setBusy(true);
-                post({ filter, status: "approved", keepStatus: true }).then((ok) => {
+                post({ filter, status: "approved", keepStatus: true }).then((r) => {
                   setBusy(false);
-                  if (!ok) return setMessage({ text: "Couldn't approve — nothing was changed.", error: true });
+                  if (!r.ok) return setMessage({ text: "Couldn't approve — nothing was changed.", error: true });
                   setMessage({ text: `Approved ${total.toLocaleString()} transactions` });
                   startTransition(() => router.refresh());
                 });
