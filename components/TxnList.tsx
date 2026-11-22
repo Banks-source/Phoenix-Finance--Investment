@@ -5,7 +5,7 @@ import { Txn, TxnFilter } from "@/lib/queries";
 import { CATEGORIES } from "@/lib/taxonomy";
 import { money } from "@/lib/format";
 import { TypeBadge } from "@/components/ui";
-import { Check, ChevronDown, ChevronRight, Undo2, X } from "lucide-react";
+import { ArrowRight, Check, CheckCheck, ChevronDown, ChevronRight, Undo2, X } from "lucide-react";
 
 // One transaction list for the whole app: the same rows, the same inline edit
 // and the same bulk-edit bar wherever you reach transactions from.
@@ -27,6 +27,8 @@ function dayLabel(iso: string): string {
   return d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
+export type Flow = { from: string | null; to: string | null };
+
 type Prev = Pick<Txn, "id" | "category" | "sub_category" | "owner" | "status">;
 
 export default function TxnList({
@@ -35,6 +37,7 @@ export default function TxnList({
   filter,
   allSubCategories = [],
   accountNames = {},
+  flows = {},
 }: {
   rows: Txn[];
   /** How many transactions match the current filters (may exceed what's on this page). */
@@ -43,6 +46,8 @@ export default function TxnList({
   filter: TxnFilter;
   allSubCategories?: string[];
   accountNames?: Record<string, string>;
+  /** Where each transfer came from / went to, when known (Review screen). */
+  flows?: Record<string, Flow>;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -207,6 +212,25 @@ export default function TxnList({
             Select all {total.toLocaleString()} matching these filters
           </button>
         )}
+        {filter.status === "pending_review" && total > 0 && (
+          <button
+            className="btn-ghost ml-auto"
+            disabled={busy}
+            onClick={() => {
+              if (window.confirm(`Approve all ${total.toLocaleString()} transactions matching these filters?`)) {
+                setBusy(true);
+                post({ filter, status: "approved", keepStatus: true }).then((ok) => {
+                  setBusy(false);
+                  if (!ok) return setMessage({ text: "Couldn't approve — nothing was changed.", error: true });
+                  setMessage({ text: `Approved ${total.toLocaleString()} transactions` });
+                  startTransition(() => router.refresh());
+                });
+              }
+            }}
+          >
+            <CheckCheck size={14} /> Approve all {total.toLocaleString()}
+          </button>
+        )}
         {allMatching && (
           <span className="text-indigo-700">
             All {total.toLocaleString()} matching transactions selected ·{" "}
@@ -257,6 +281,7 @@ export default function TxnList({
                   key={`${t.id}|${t.category}|${t.sub_category}|${t.owner}|${t.status}`}
                   t={t}
                   account={t.account_id ? accountNames[t.account_id] : undefined}
+                  flow={flows[t.id]}
                   checked={selected.has(t.id)}
                   isOpen={open === t.id}
                   busy={busy}
@@ -356,6 +381,7 @@ export default function TxnList({
 function Row({
   t,
   account,
+  flow,
   checked,
   isOpen,
   busy,
@@ -365,6 +391,7 @@ function Row({
 }: {
   t: Txn;
   account?: string;
+  flow?: Flow;
   checked: boolean;
   isOpen: boolean;
   busy: boolean;
@@ -405,7 +432,23 @@ function Row({
             </span>
             {toReview && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">to review</span>}
           </div>
+          <FlowLine flow={flow} />
+          {t.review_reason && toReview && (
+            <div className="mt-0.5 truncate text-xs text-amber-600" title={t.review_reason}>
+              ⚑ {t.review_reason}
+            </div>
+          )}
         </button>
+        {toReview && (
+          <button
+            className="btn-primary !px-2.5"
+            title={t.category ? "Approve" : "Choose a category first"}
+            disabled={busy || !t.category}
+            onClick={() => onSave({ status: "approved" })}
+          >
+            <Check size={15} />
+          </button>
+        )}
         <span className="mt-1 text-gray-300">{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
       </div>
 
@@ -461,13 +504,19 @@ function Row({
           <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2">
             {(
               [
+                ["From account", flow?.from],
+                ["To account", flow?.to],
                 ["Description", t.detail],
                 ["Extended description", t.extended_description],
                 ["Reference", t.reference],
                 ["Bank category", t.provider_category],
                 ["Posted", t.posted_at ? new Date(t.posted_at).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" }) : null],
                 ["Why it's in review", t.review_reason],
+                ["Merchant category code", t.merchant_category_code],
+                ["Bank status", t.bank_status],
+                ["Confidence", t.confidence != null ? `${Math.round(Number(t.confidence) * 100)}%` : null],
                 ["Source", t.source],
+                ["Bank transaction ID", t.bank_txn_id],
               ] as [string, string | null | undefined][]
             )
               .filter(([, v]) => v)
@@ -481,5 +530,20 @@ function Row({
         </div>
       )}
     </li>
+  );
+}
+
+function FlowLine({ flow }: { flow?: Flow }) {
+  if (!flow || (!flow.from && !flow.to)) return null;
+  return (
+    <div className="mt-0.5 flex items-center gap-1 truncate text-xs text-indigo-600">
+      <span className="truncate">{flow.from ?? "External"}</span>
+      {flow.to && (
+        <>
+          <ArrowRight size={11} className="shrink-0" />
+          <span className="truncate">{flow.to}</span>
+        </>
+      )}
+    </div>
   );
 }
