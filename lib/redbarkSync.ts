@@ -2,7 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { listConnections, listAccounts, listTransactions, getBalance, RedbarkAccount, RedbarkTransaction } from "@/lib/redbark";
 import { categoriseSync, MerchantRule } from "@/lib/categorise";
 import { loadMerchantRules } from "@/lib/payeeMemory";
-import { classifyMoneyMovement, extractAccountDigits, needsBufferDecision } from "@/lib/transferClassification";
+import { classifyMoneyMovement, extractAccountDigits } from "@/lib/transferClassification";
 import { applyIngLoanCategory } from "@/lib/ingProperty";
 import { resolveIncomeSubCategory, Owner } from "@/lib/incomeClassification";
 
@@ -52,6 +52,8 @@ export function redbarkAmount(t: RedbarkTransaction): number {
 
 export interface ImportContext {
   institution: string;
+  /** The bank's name for the account — used to recognise the ING loan. */
+  accountName?: string;
   owner: string;
   accountId: string;
   merchantRules: MerchantRule[];
@@ -63,6 +65,7 @@ export function buildImportRow(t: RedbarkTransaction, ctx: ImportContext) {
   const amount = redbarkAmount(t);
   const s = applyIngLoanCategory(
     ctx.institution,
+    ctx.accountName,
     categoriseSync(t.merchant_name ?? t.description, t.description, ctx.merchantRules, t.provider_category),
     t.description
   );
@@ -75,9 +78,7 @@ export function buildImportRow(t: RedbarkTransaction, ctx: ImportContext) {
       : s.category === "Income"
         ? resolveIncomeSubCategory(t.description, ctx.owner as Owner)
         : s.sub_category;
-  // Big Westpac buffer moves need a human call: paydown vs temporary top-up.
-  const subCategory =
-    s.category === "Money Movement" && needsBufferDecision(t.description, amount) ? "Needs review" : baseSubCategory;
+  const subCategory = baseSubCategory;
   return {
     date: t.date,
     amount,
@@ -225,7 +226,7 @@ export async function runRedbarkSync(): Promise<RedbarkSyncResult> {
       }
       seen.add(key);
       toInsert.push(
-        buildImportRow(t, { institution: acct.institution.name, owner, accountId, merchantRules, ourAccountDigits })
+        buildImportRow(t, { institution: acct.institution.name, accountName: acct.name, owner, accountId, merchantRules, ourAccountDigits })
       );
     }
 

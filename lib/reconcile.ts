@@ -138,6 +138,7 @@ export async function runReconciliation({ apply }: { apply: boolean }): Promise<
     return {
       ...buildImportRow(b.t, {
         institution: b.acct.institution.name,
+        accountName: b.acct.name,
         owner: ownerMap.get(b.acct.id)!,
         accountId: dbAccountByRb.get(b.acct.id)!,
         merchantRules,

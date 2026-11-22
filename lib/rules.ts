@@ -45,7 +45,8 @@ export const RULES: Rule[] = [
   { re: /ASHBY.*LATE PAYMENT FEE|LATE PAYMENT FEE.*ASHBY|ING LOAN LATE PAYMENT FEE/, category: "Investment", sub_category: "Loan Fees", type: "bills_fixed" },
   // Generic fallback — must stay below the Ashby-specific fee rule above.
   { re: /LATE PAYMENT FEE/, category: "Fees", sub_category: "Late payment fee", type: "bills_fixed" },
-  { re: /ASHBY LOAN/, category: "Investment", sub_category: "Loan Repayment", type: "bills_fixed" },
+  // A payment into the ING (Ashby) loan is money moving between our own accounts; only the interest and fees charged on the loan are cost.
+  { re: /ASHBY LOAN/, category: "Money Movement", sub_category: "Internal transfer", type: "transfers" },
   { re: /ZIPMONEY|ZIP MONEY/, category: "Money Movement", sub_category: "ZipMoney", type: "debt" },
 
   // ---- Transfers / money movement (unambiguous only) ----------------------
@@ -137,7 +138,9 @@ export const RULES: Rule[] = [
   // was actually a recognisable bill (AGL, Telstra, rent, etc.) has already
   // matched a more specific rule by this point. What's left here really is
   // unrecognised money movement.
-  { re: /LINKED ACC TRNS|INTERNET PAYMENT|LINKED ACC/, category: "Money Movement", sub_category: "Card payment", type: "transfers" },
+  // "Linked Acc Trns" is NAB moving money between accounts in one profile; a bare "Internet Payment" could be anyone, so leave the direction to the movement engine.
+  { re: /LINKED ACC TRNS|LINKED ACC/, category: "Money Movement", sub_category: "Internal transfer", type: "transfers" },
+  { re: /INTERNET PAYMENT/, category: "Money Movement", type: "transfers" },
   { re: /TRANSFER (TO|FROM|DEBIT|CREDIT|IN|OUT)|FAST TRANSFER|INTERNET TRANSFER|COMMBANK APP/, category: "Money Movement", type: "transfers" },
   { re: /\bBPAY\b|PAYID|NETBANK/, category: "Money Movement", type: "transfers" },
 

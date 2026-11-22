@@ -50,11 +50,11 @@ describe("ruleCategorise — bill payments made via BPAY/transfer", () => {
 });
 
 describe("ruleCategorise — loan/redraw buffer transfers vs the interest they fund", () => {
-  it("categorises an Ashby investment-loan transfer as an Investment expense (its credit leg on the loan side cancels it)", () => {
+  it("treats a payment into the ING (Ashby) loan as an internal transfer — only the interest and fees on the loan are cost", () => {
     const result = ruleCategorise("Transfer To milani CommBank App Ashby loan", "");
-    expect(result.category).toBe("Investment");
-    expect(result.sub_category).toBe("Loan Repayment");
-    expect(result.type).toBe("bills_fixed");
+    expect(result.category).toBe("Money Movement");
+    expect(result.sub_category).toBe("Internal transfer");
+    expect(result.type).toBe("transfers");
   });
 
   it("categorises a Westpac Flexi Loan buffer payment as Money Movement/transfers, not debt", () => {

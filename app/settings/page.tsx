@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/ui";
 import Link from "next/link";
-import { Tags, BellRing, UserCog, Brain } from "lucide-react";
+import { Tags, BellRing, UserCog, Brain, ArrowLeftRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,12 @@ const SECTIONS = [
     title: "Categorisation memory",
     description: "What the app has learned from your edits and approvals — change or forget any payee.",
     icon: Brain,
+  },
+  {
+    href: "/settings/movement",
+    title: "Money movement",
+    description: "Match transfers between your own accounts; flag payments to accounts I don't recognise.",
+    icon: ArrowLeftRight,
   },
   {
     href: "/settings/alerts",
