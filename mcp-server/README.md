@@ -95,3 +95,39 @@ server, so both tiers are auditable the same way.
 No tool here writes, updates, or deletes anything — the `mcp_readonly` role
 has no write grants, so this is structurally enforced at the database level,
 not just by convention in this code.
+
+---
+
+# Remote server (`/api/mcp`)
+
+The deployed app also serves an MCP endpoint at `https://<your-app>/api/mcp`
+(Streamable HTTP, stateless). Unlike the local server above it **is**
+network-reachable, so it is gated by bearer tokens set in Vercel:
+
+| Env var | Grants |
+| --- | --- |
+| `PHOENIX_MCP_TOKEN` | read tools: `budget_status`, `spend_by_category`, `search_transactions`, `review_queue`, `account_balances`, `list_categories`, `memory_lookup` |
+| `PHOENIX_MCP_WRITE_TOKEN` | the read tools plus `categorise_transactions`, `approve_transactions`, `set_category_budget` |
+
+Each must be 24+ characters (`openssl rand -hex 32`); an unset token switches
+that scope off. Nothing here can delete data. Edits go through the same code
+path as the app (`lib/reviewEdit.ts`), so what you categorise over MCP is
+remembered exactly like a change made on the Review screen.
+
+Every call is logged to the Vercel function logs (`{"mcp": tool, scope, args}`).
+
+Connect from Claude Code:
+
+```bash
+claude mcp add --transport http phoenix https://<your-app>/api/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+Claude Desktop (via `mcp-remote`):
+
+```json
+{ "mcpServers": { "phoenix": { "command": "npx", "args": ["-y", "mcp-remote", "https://<your-app>/api/mcp", "--header", "Authorization: Bearer <token>"] } } }
+```
+
+claude.ai's "custom connector" screen expects OAuth rather than a bearer
+header, so it can't use this endpoint as it stands.
