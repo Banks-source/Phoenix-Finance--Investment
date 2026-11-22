@@ -32,7 +32,7 @@ export default async function ClaimsPage({
   // Prior-FY net-by-category, shown as a hint next to each group.
   const priorFy = period.kind === "fy" && period.value ? period.value - 1 : null;
   const priorLabel = priorFy ? fyLabel(priorFy) : undefined;
-  const priorRows = priorFy ? await fetchCategoryTotals({ kind: "fy", value: priorFy }) : [];
+  const priorRows = priorFy ? await fetchCategoryTotals({ kind: "fy", value: priorFy }, "confirmed") : [];
   const priorByCategory: Record<string, number> = {};
   for (const r of priorRows) priorByCategory[r.category] = r.net;
 

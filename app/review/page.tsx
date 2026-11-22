@@ -7,6 +7,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { accountName, AccountRef } from "@/lib/transferAccounts";
 import { computeFlows } from "@/lib/transferFlows";
 import { CATEGORIES } from "@/lib/taxonomy";
+import AutoCategoriseButton from "@/components/AutoCategoriseButton";
 import { X } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,11 @@ export default async function ReviewPage({ searchParams }: { searchParams: SP })
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Review" subtitle={`${count.toLocaleString()} waiting for your approval`} />
+      <PageHeader
+        title="Review"
+        subtitle={`${count.toLocaleString()} waiting for your approval · already counted in budgets as unreviewed`}
+        actions={<AutoCategoriseButton />}
+      />
 
       <form className="card flex flex-wrap items-end gap-2 p-3" action="/review">
         <label className="min-w-[10rem] flex-1 text-xs text-gray-500">

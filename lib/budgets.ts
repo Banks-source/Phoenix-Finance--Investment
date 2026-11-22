@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { EXPENSE_TYPES } from "@/lib/fy";
+import { Basis, statusesFor } from "@/lib/basis";
 
 type AnyClient = ReturnType<typeof createServiceClient>;
 
@@ -25,14 +26,14 @@ async function fetchAll<T>(build: (c: AnyClient) => any): Promise<T[]> {
  * "Months elapsed" includes the current partial month as a full unit, same
  * approach as fetchAverageMonthlySpend in lib/queries.ts.
  */
-export async function fetchYtdSpendByCategory(year: number): Promise<Record<string, number>> {
+export async function fetchYtdSpendByCategory(year: number, basis: Basis = "all"): Promise<Record<string, number>> {
   const today = new Date();
   const isCurrentYear = today.getFullYear() === year;
   const from = `${year}-01-01`;
   const to = isCurrentYear ? today.toISOString().slice(0, 10) : `${year}-12-31`;
 
   const rows = await fetchAll<{ category: string | null; type: string; amount: number }>((c) =>
-    c.from("transactions").select("category, type, amount").eq("status", "approved").gte("date", from).lte("date", to)
+    c.from("transactions").select("category, type, amount").in("status", statusesFor(basis)).gte("date", from).lte("date", to)
   );
 
   const totals: Record<string, number> = {};
@@ -43,10 +44,10 @@ export async function fetchYtdSpendByCategory(year: number): Promise<Record<stri
   return totals;
 }
 
-export async function fetchYtdAverageByCategory(year: number): Promise<Record<string, number>> {
+export async function fetchYtdAverageByCategory(year: number, basis: Basis = "all"): Promise<Record<string, number>> {
   const today = new Date();
   const monthsElapsed = today.getFullYear() === year ? today.getMonth() + 1 : 12;
-  const totals = await fetchYtdSpendByCategory(year);
+  const totals = await fetchYtdSpendByCategory(year, basis);
 
   const averages: Record<string, number> = {};
   for (const [cat, total] of Object.entries(totals)) averages[cat] = total / monthsElapsed;
@@ -58,7 +59,7 @@ export async function fetchYtdAverageByCategory(year: number): Promise<Record<st
  * month being viewed on /budget — defaults to today's month/year there, but
  * the user can page back/forward to any month to check it against budget.
  */
-export async function fetchMonthSpendByCategory(year: number, month: number): Promise<Record<string, number>> {
+export async function fetchMonthSpendByCategory(year: number, month: number, basis: Basis = "all"): Promise<Record<string, number>> {
   const today = new Date();
   const isCurrentMonth = year === today.getFullYear() && month === today.getMonth() + 1;
   const from = `${year}-${String(month).padStart(2, "0")}-01`;
@@ -66,7 +67,7 @@ export async function fetchMonthSpendByCategory(year: number, month: number): Pr
   const to = isCurrentMonth ? today.toISOString().slice(0, 10) : new Date(year, month, 0).toISOString().slice(0, 10);
 
   const rows = await fetchAll<{ category: string | null; type: string; amount: number }>((c) =>
-    c.from("transactions").select("category, type, amount").eq("status", "approved").gte("date", from).lte("date", to)
+    c.from("transactions").select("category, type, amount").in("status", statusesFor(basis)).gte("date", from).lte("date", to)
   );
 
   const totals: Record<string, number> = {};

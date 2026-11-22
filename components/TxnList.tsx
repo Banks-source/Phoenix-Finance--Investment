@@ -443,6 +443,11 @@ function Row({
               {t.sub_category && <span className="text-gray-400"> › {t.sub_category}</span>}
             </span>
             {toReview && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">to review</span>}
+            {toReview && t.categorised_by === "claude" && (
+              <span className="rounded bg-violet-50 px-1.5 py-0.5 text-violet-700" title="Suggested by Claude — not sure, please check">
+                suggested
+              </span>
+            )}
           </div>
           <FlowLine flow={flow} />
           {t.review_reason && toReview && (
@@ -527,6 +532,7 @@ function Row({
                 ["Merchant category code", t.merchant_category_code],
                 ["Bank status", t.bank_status],
                 ["Confidence", t.confidence != null ? `${Math.round(Number(t.confidence) * 100)}%` : null],
+                ["Categorised by", t.categorised_by === "claude" ? "Claude (suggestion)" : null],
                 ["Source", t.source],
                 ["Bank transaction ID", t.bank_txn_id],
               ] as [string, string | null | undefined][]

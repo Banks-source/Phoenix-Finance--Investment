@@ -30,7 +30,7 @@ export default async function TaxPage({
   const fy26Period = parsePeriod({ period: "fy", value: String(CLAIMS_ESTIMATE_FY) });
 
   const [totals, claimTotals, estimates, taggedFy26] = await Promise.all([
-    fetchTypeTotals(period),
+    fetchTypeTotals(period, "confirmed"),
     fetchClaimTotals(period),
     fetchClaimEstimates(CLAIMS_ESTIMATE_FY),
     fetchTaggedClaims(fy26Period),

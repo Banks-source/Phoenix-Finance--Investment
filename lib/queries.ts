@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { PeriodFilter, parsePeriod, periodBounds, periodsFromDates, fyRange, fyEndYearForDate, EXPENSE_TYPES } from "@/lib/fy";
 import { TxnType, CATEGORY_TYPE, NO_SUB_CATEGORY } from "@/lib/taxonomy";
+import { Basis, statusesFor } from "@/lib/basis";
 import { CLAIM_CANDIDATE_CATEGORIES, categoryIsDeductibleLens } from "@/lib/taxcats";
 
 type AnyClient = ReturnType<typeof createServiceClient>;
@@ -53,6 +54,8 @@ export interface Txn {
   merchant_category_code?: string | null;
   bank_status?: string | null;
   review_reason?: string | null;
+  /** "claude" when the daily job suggested this category (migration 0027). */
+  categorised_by?: string | null;
 }
 
 /** Distinct dates across the whole store — used to build the period dropdown. */
@@ -186,10 +189,10 @@ export async function fetchAllTransactions(opts: Omit<FetchOpts, "limit" | "offs
 }
 
 /** Aggregate totals by taxonomy type for a period (for stat cards / overview). */
-export async function fetchTypeTotals(period?: PeriodFilter) {
+export async function fetchTypeTotals(period?: PeriodFilter, basis: Basis = "all") {
   const b = period ? periodBounds(period) : null;
   const rows = await fetchAll<{ type: string; amount: number }>((c) => {
-    let q = c.from("transactions").select("type, amount").eq("status", "approved");
+    let q = c.from("transactions").select("type, amount").in("status", statusesFor(basis));
     if (b) q = q.gte("date", b[0]).lte("date", b[1]);
     return q;
   });
@@ -207,7 +210,7 @@ export async function fetchTypeTotals(period?: PeriodFilter) {
  * that real bank-feed data exists (docs/backlog-v2.5-data-layer.md: "until
  * that exists, use the thesis estimate" — it exists now).
  */
-export async function fetchAverageMonthlySpend(months = 3): Promise<number> {
+export async function fetchAverageMonthlySpend(months = 3, basis: Basis = "all"): Promise<number> {
   const to = new Date();
   const from = new Date(to);
   from.setMonth(from.getMonth() - months);
@@ -215,7 +218,7 @@ export async function fetchAverageMonthlySpend(months = 3): Promise<number> {
   const toIso = to.toISOString().slice(0, 10);
 
   const rows = await fetchAll<{ type: string; amount: number }>((c) =>
-    c.from("transactions").select("type, amount").eq("status", "approved").gte("date", fromIso).lte("date", toIso)
+    c.from("transactions").select("type, amount").in("status", statusesFor(basis)).gte("date", fromIso).lte("date", toIso)
   );
   const total = rows
     .filter((r) => (EXPENSE_TYPES as string[]).includes(r.type))
@@ -224,10 +227,10 @@ export async function fetchAverageMonthlySpend(months = 3): Promise<number> {
 }
 
 /** Net by category for a period. */
-export async function fetchCategoryTotals(period?: PeriodFilter) {
+export async function fetchCategoryTotals(period?: PeriodFilter, basis: Basis = "all") {
   const b = period ? periodBounds(period) : null;
   const rows = await fetchAll<{ category: string | null; type: string; amount: number }>((c) => {
-    let q = c.from("transactions").select("category, type, amount").eq("status", "approved");
+    let q = c.from("transactions").select("category, type, amount").in("status", statusesFor(basis));
     if (b) q = q.gte("date", b[0]).lte("date", b[1]);
     return q;
   });
@@ -256,10 +259,10 @@ export interface CategoryMonthlyTrend {
  * every other spend total in the app). Returns every category with any spend
  * — the Overview trend chart picks its own top N and lets the rest be added.
  */
-export async function fetchCategoryMonthlyTrend(period?: PeriodFilter): Promise<CategoryMonthlyTrend> {
+export async function fetchCategoryMonthlyTrend(period?: PeriodFilter, basis: Basis = "all"): Promise<CategoryMonthlyTrend> {
   const b = period ? periodBounds(period) : null;
   const rows = await fetchAll<{ date: string; category: string | null; type: string; amount: number }>((c) => {
-    let q = c.from("transactions").select("date, category, type, amount").eq("status", "approved");
+    let q = c.from("transactions").select("date, category, type, amount").in("status", statusesFor(basis));
     if (b) q = q.gte("date", b[0]).lte("date", b[1]);
     return q;
   });
@@ -289,10 +292,10 @@ export async function fetchCategoryMonthlyTrend(period?: PeriodFilter): Promise<
 }
 
 /** Net by sub-category for a given transaction type in a period (e.g. income sources). */
-export async function fetchSubCategoryTotals(type: string, period?: PeriodFilter) {
+export async function fetchSubCategoryTotals(type: string, period?: PeriodFilter, basis: Basis = "all") {
   const b = period ? periodBounds(period) : null;
   const rows = await fetchAll<{ sub_category: string | null; amount: number }>((c) => {
-    let q = c.from("transactions").select("sub_category, amount").eq("status", "approved").eq("type", type);
+    let q = c.from("transactions").select("sub_category, amount").in("status", statusesFor(basis)).eq("type", type);
     if (b) q = q.gte("date", b[0]).lte("date", b[1]);
     return q;
   });
@@ -308,10 +311,10 @@ export async function fetchSubCategoryTotals(type: string, period?: PeriodFilter
 }
 
 /** Net by sub-category within one category, for a period — the drill-down level under Categories. */
-export async function fetchSubCategoryTotalsForCategory(category: string, period?: PeriodFilter) {
+export async function fetchSubCategoryTotalsForCategory(category: string, period?: PeriodFilter, basis: Basis = "all") {
   const b = period ? periodBounds(period) : null;
   const rows = await fetchAll<{ sub_category: string | null; amount: number }>((c) => {
-    let q = c.from("transactions").select("sub_category, amount").eq("status", "approved").eq("category", category);
+    let q = c.from("transactions").select("sub_category, amount").in("status", statusesFor(basis)).eq("category", category);
     if (b) q = q.gte("date", b[0]).lte("date", b[1]);
     return q;
   });
@@ -523,4 +526,29 @@ export async function fetchCategoryYoY(fys: number[]): Promise<YoyRow[]> {
   return [...map.values()].sort(
     (a, b) => Math.abs(b.byFy[latest]?.all ?? 0) - Math.abs(a.byFy[latest]?.all ?? 0)
   );
+}
+
+export interface UnreviewedSummary {
+  count: number;
+  /** Money out (expense types) sitting in unreviewed rows. */
+  expense: number;
+  /** Transfers/payments waiting for you to say what they are. */
+  needsCategory: number;
+}
+
+/** What's still waiting for review in a period — shown beside every provisional total. */
+export async function fetchUnreviewedSummary(period?: PeriodFilter): Promise<UnreviewedSummary> {
+  const b = period ? periodBounds(period) : null;
+  const rows = await fetchAll<{ type: string; amount: number; category: string | null; sub_category: string | null }>((c) => {
+    let q = c.from("transactions").select("type, amount, category, sub_category").eq("status", "pending_review");
+    if (b) q = q.gte("date", b[0]).lte("date", b[1]);
+    return q;
+  });
+  let expense = 0;
+  let needsCategory = 0;
+  for (const r of rows) {
+    if ((EXPENSE_TYPES as string[]).includes(r.type)) expense += Math.abs(Number(r.amount));
+    if (!r.category || r.category === "Uncategorised" || r.sub_category === "Needs review") needsCategory++;
+  }
+  return { count: rows.length, expense, needsCategory };
 }

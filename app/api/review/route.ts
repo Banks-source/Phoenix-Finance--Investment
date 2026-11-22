@@ -38,8 +38,14 @@ export async function POST(req: NextRequest) {
   const built = buildBulkUpdate(body);
   if ("error" in built) return NextResponse.json({ error: built.error }, { status: 400 });
 
+  // Choosing a category yourself replaces any Claude suggestion on the row.
+  const fullUpdate = built.update.category ? { ...built.update, categorised_by: null } : built.update;
   for (let i = 0; i < ids.length; i += CHUNK) {
-    const { error } = await supabase.from("transactions").update(built.update).in("id", ids.slice(i, i + CHUNK));
+    const chunk = ids.slice(i, i + CHUNK);
+    let { error } = await supabase.from("transactions").update(fullUpdate).in("id", chunk);
+    if (error && (error.code === "42703" || error.code === "PGRST204")) {
+      ({ error } = await supabase.from("transactions").update(built.update).in("id", chunk)); // migration 0027 not applied yet
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
   // Learning is best-effort: a failure here must never undo or hide the edit itself.

@@ -2,7 +2,9 @@ import PeriodSelector from "@/components/PeriodSelector";
 import NetWorthTrend from "@/components/NetWorthTrend";
 import BankLogo from "@/components/BankLogo";
 import { PageHeader } from "@/components/ui";
-import { getAvailablePeriods, fetchTypeTotals, fetchCategoryTotals, fetchSubCategoryTotals } from "@/lib/queries";
+import { getAvailablePeriods, fetchTypeTotals, fetchCategoryTotals, fetchSubCategoryTotals, fetchUnreviewedSummary } from "@/lib/queries";
+import BasisNote from "@/components/BasisNote";
+import { parseBasis } from "@/lib/basis";
 import { fetchNetWorthHistory } from "@/lib/allocation";
 import { fetchBalanceSummary } from "@/lib/balances";
 import { fetchCategoryBudgets, fetchMonthSpendByCategory, fetchYtdAverageByCategory } from "@/lib/budgets";
@@ -16,24 +18,28 @@ export const dynamic = "force-dynamic";
 export default async function OverviewPage({
   searchParams,
 }: {
-  searchParams: { period?: string; value?: string; from?: string; to?: string };
+  searchParams: { period?: string; value?: string; from?: string; to?: string; basis?: string };
 }) {
   const { years, fys } = await getAvailablePeriods();
 
   const effective = !searchParams.period ? { period: "year", value: String(DEFAULT_CALENDAR_YEAR) } : searchParams;
   const period = parsePeriod(effective);
 
+  const basis = parseBasis(searchParams.basis);
   const today = new Date();
-  const [totals, categories, incomeSubs, netWorthHistory, balances, budgets, monthSpend, ytdAverages] =
+  const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+  const [totals, categories, incomeSubs, netWorthHistory, balances, budgets, monthSpend, ytdAverages, monthUnreviewed, periodUnreviewed] =
     await Promise.all([
-      fetchTypeTotals(period),
-      fetchCategoryTotals(period),
-      fetchSubCategoryTotals("income", period),
+      fetchTypeTotals(period, basis),
+      fetchCategoryTotals(period, basis),
+      fetchSubCategoryTotals("income", period, basis),
       fetchNetWorthHistory(),
       fetchBalanceSummary(),
       fetchCategoryBudgets(),
-      fetchMonthSpendByCategory(today.getFullYear(), today.getMonth() + 1),
-      fetchYtdAverageByCategory(DEFAULT_CALENDAR_YEAR),
+      fetchMonthSpendByCategory(today.getFullYear(), today.getMonth() + 1, basis),
+      fetchYtdAverageByCategory(DEFAULT_CALENDAR_YEAR, basis),
+      fetchUnreviewedSummary({ kind: "custom", from: monthStart, to: today.toISOString().slice(0, 10) }),
+      fetchUnreviewedSummary(period),
     ]);
 
   // ---- Budget position for the month in progress -------------------------
@@ -63,9 +69,11 @@ export default async function OverviewPage({
   if (effective.value) periodParams.value = effective.value;
   if (effective.from) periodParams.from = effective.from;
   if (effective.to) periodParams.to = effective.to;
+  // Provisional totals include rows still in review, so the drill-down must too.
+  const statusParam = basis === "all" ? "all" : "approved";
   const incomeHref = (name: string) =>
-    `/reclassify?${new URLSearchParams({ type: "income", sub_category: name, ...periodParams })}`;
-  const expenseHref = (name: string) => `/reclassify?${new URLSearchParams({ category: name, ...periodParams })}`;
+    `/reclassify?${new URLSearchParams({ type: "income", sub_category: name, status: statusParam, ...periodParams })}`;
+  const expenseHref = (name: string) => `/reclassify?${new URLSearchParams({ category: name, status: statusParam, ...periodParams })}`;
 
   const incomeCats = incomeSubs.map((s) => ({
     category: s.name,
@@ -180,6 +188,8 @@ export default async function OverviewPage({
           />
         </div>
 
+        <BasisNote basis={basis} summary={monthUnreviewed} path="/" params={searchParams} className="mt-3" />
+
         {attention.length > 0 && (
           <div className="mt-4 space-y-2.5">
             {attention.map((r) => {
@@ -215,6 +225,8 @@ export default async function OverviewPage({
         subtitle={periodLabel(period)}
         actions={<PeriodSelector years={years} fys={fys} fallback={`year:${DEFAULT_CALENDAR_YEAR}`} />}
       />
+
+      <BasisNote basis={basis} summary={periodUnreviewed} path="/" params={searchParams} />
 
       <div className="grid grid-cols-3 gap-3">
         <MiniStat label="Income" value={money(income)} color={TYPE_COLORS.income} />

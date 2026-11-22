@@ -10,6 +10,9 @@ import {
 } from "@/lib/budgets";
 import { computeAnnualPace, yearFraction, type PaceStatus } from "@/lib/annualBudget";
 import { money } from "@/lib/format";
+import BasisNote from "@/components/BasisNote";
+import { parseBasis } from "@/lib/basis";
+import { fetchUnreviewedSummary } from "@/lib/queries";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -23,7 +26,7 @@ const MONTH_NAMES = [
 export default async function BudgetPage({
   searchParams,
 }: {
-  searchParams: { year?: string; month?: string };
+  searchParams: { year?: string; month?: string; basis?: string };
 }) {
   const today = new Date();
   const year = Number(searchParams.year) || today.getFullYear();
@@ -31,11 +34,16 @@ export default async function BudgetPage({
 
   const isCurrentMonth = year === today.getFullYear() && month === today.getMonth() + 1;
 
-  const [ytdAverages, savedBudgets, monthSpend, yearSpend] = await Promise.all([
-    fetchYtdAverageByCategory(DEFAULT_CALENDAR_YEAR),
+  const basis = parseBasis(searchParams.basis);
+  const monthFrom = `${year}-${String(month).padStart(2, "0")}-01`;
+  const monthTo = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+
+  const [ytdAverages, savedBudgets, monthSpend, yearSpend, unreviewed] = await Promise.all([
+    fetchYtdAverageByCategory(DEFAULT_CALENDAR_YEAR, basis),
     fetchCategoryBudgets(),
-    fetchMonthSpendByCategory(year, month),
-    fetchYtdSpendByCategory(year),
+    fetchMonthSpendByCategory(year, month, basis),
+    fetchYtdSpendByCategory(year, basis),
+    fetchUnreviewedSummary({ kind: "custom", from: monthFrom, to: monthTo }),
   ]);
 
   const expenseCategories = CATEGORIES.filter((c) => EXPENSE_TYPES.includes(c.type as (typeof EXPENSE_TYPES)[number]));
@@ -79,7 +87,7 @@ export default async function BudgetPage({
 
   const prev = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
   const next = month === 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 };
-  const hrefFor = (y: number, m: number) => `/budget?year=${y}&month=${m}`;
+  const hrefFor = (y: number, m: number) => `/budget?year=${y}&month=${m}${basis === "confirmed" ? "&basis=confirmed" : ""}`;
 
   return (
     <div className="space-y-6">
@@ -105,6 +113,8 @@ export default async function BudgetPage({
           </div>
         }
       />
+
+      <BasisNote basis={basis} summary={unreviewed} path="/budget" params={{ year: String(year), month: String(month) }} />
 
       <section className="card p-5">
         <div className="flex items-start justify-between gap-3">
